@@ -44,7 +44,7 @@ let initializeGame = function() {
     display.recalculate();
     display.renderBackground(display.canvas, display.context);
     
-    gameTimer = setInterval(gameLoop, 1000);
+    gameTimer = setInterval(gameLoop, 10);
     
 };
 
@@ -83,6 +83,7 @@ function spaceShip(x, y, width, height, color) {
     this.width = width,
     this.height = height,
     this.color = color,
+    this.step = 20,
     this.render = (context) => {
         context.fillStyle = this.color;
         context.fillRect(this.x, this.y, this.width, this.height);
@@ -90,9 +91,11 @@ function spaceShip(x, y, width, height, color) {
     },
     this.moveLeft = ()=>{
         console.log("Spaceship moves left");
+        this.x -this.step < 0 ? this.x = 0 : this.x -= this.step;
     },
     this.moveRight = ()=>{
         console.log("Spaceship moves right");
+        this.x +this.step + this.width > game.width ? this.x = game.width - this.width : this.x += this.step;
     },
     this.keyMap = {
         "65": this.moveLeft,
