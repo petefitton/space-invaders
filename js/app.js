@@ -1,11 +1,24 @@
+// game loop timer
 let gameTimer;
+// information of canvas
 let display;
+// players space ship
 let playerSpaceShip;
+// players object
 let playerObj;
+// enemy object
+let enemyObj;
 
+// size for space ships
+let spaceShipWidth = 20;
+let spaceShipHeight = 20;
+
+// who is listening for events
 let inputSubscribers = new Map();
 let renderSubscribers = new Map();
 
+
+// color values
 const colors = {
     background: "#C0C0C0",
     playerColor: "#0000FF",
@@ -13,7 +26,8 @@ const colors = {
     projectileColor: "#FFFF00"
 };
 
-function gameScreen() {
+// Display knows about the HTML 5 canvas
+function Display() {
     this.canvas = document.getElementById("game"),
     this.centerWidth = this.canvas.width / 2,
     this.context = this.canvas.getContext("2d"),
@@ -30,26 +44,7 @@ function gameScreen() {
     }
 };
 
-let initializeGame = function() {
-    console.log("Initializing");
-    display = new gameScreen();
-    playerSpaceShip = new spaceShip(display.centerWidth-(20/2), display.canvas.height-20, 20,20,colors.playerColor);
-    playerObj = new player(playerSpaceShip);
-    inputSubscribers.set("player", playerObj);
-    renderSubscribers.set('playerObj',playerObj);
-
-    document.addEventListener("keydown", keyInputHandler);
-    display.canvas = document.getElementById("game");
-    display.context = display.canvas.getContext("2d");
-    display.recalculate();
-    display.renderBackground(display.canvas, display.context);
-    
-    gameTimer = setInterval(gameLoop, 10);
-    
-};
-
-document.addEventListener("DOMContentLoaded", initializeGame);
-
+// listener for key down
 var keyInputHandler = function(e) {
     console.log(`User pressed key: ${e.keyCode}`);
     for (const iterator of inputSubscribers) {
@@ -57,16 +52,18 @@ var keyInputHandler = function(e) {
     }
 }
 
+// the main loop
 var gameLoop = () =>{
     display.clear();
     display.context.fillStyle = colors.background;
-    
+
     display.renderBackground(display.canvas, display.context);
     for (const iterator of renderSubscribers) {
         iterator[1].render(display.context);
     }
 };
 
+// blueprint for player object
 function player (spaceShip) {
     this.spaceShip = spaceShip,
     this.inputHandler = function(inputLetter) {
@@ -77,6 +74,25 @@ function player (spaceShip) {
     }
 };
 
+// blueprint for enemy object
+function enemy() {
+    this.yLimit = Math.floor(display.canvas.height * 0.5);
+    this.spaceShips = [],
+    this.render = () => {
+        for (const ship of this.spaceShips) {
+            ship.render();
+        }
+    },
+    this.spawnShips = (rows) => {        
+        console.log(this.yLimit);
+        var enemyShip = new spaceShip(display.centerWidth-(spaceShipWidth/2), this.yLimit-spaceShipHeight, spaceShipWidth,spaceShipHeight,colors.enemyColor);
+        enemyShip.renderKey = `enemy-ship-${renderSubscribers.size}`;
+        this.spaceShips.push(enemyShip);
+        renderSubscribers.set(enemyShip.renderKey ,enemyShip);
+    }
+}
+
+// blueprint for projectiles
 function projectile(x, y, width, height, color, display, step) {
     this.x = x,
     this.y = y,
@@ -106,12 +122,14 @@ function projectile(x, y, width, height, color, display, step) {
     }
 };
 
+// blueprint for space ships
 function spaceShip(x, y, width, height, color) {
     this.x = x,
     this.y = y,
     this.width = width,
     this.height = height,
     this.color = color,
+    this.renderKey = '',
     this.step = 20,
     this.render = (context) => {
         context.fillStyle = this.color;
@@ -129,7 +147,7 @@ function spaceShip(x, y, width, height, color) {
     this.shoot = ()=>{
         let shot = new projectile(this.x + this.width / 2, this.y, 3, 10, colors.projectileColor, display, 10);
         
-        shot.renderKey = renderSubscribers.size;
+        shot.renderKey = `player-projectile-${renderSubscribers.size}`;
         renderSubscribers.set(shot.renderKey ,shot);
     },
     this.keyMap = {
@@ -138,3 +156,25 @@ function spaceShip(x, y, width, height, color) {
         "87": this.shoot
     }
 };
+
+// what has to happen to initialize the game lives here
+let initializeGame = function() {
+    console.log("Initializing");
+    display = new Display();
+    playerSpaceShip = new spaceShip(display.centerWidth-(20/2), display.canvas.height-20, 20,20,colors.playerColor);
+    playerObj = new player(playerSpaceShip);
+    inputSubscribers.set("player", playerObj);
+    renderSubscribers.set('playerObj',playerObj);
+
+    enemyObj = new enemy();
+    enemyObj.spawnShips(1);
+
+    document.addEventListener("keydown", keyInputHandler);
+    display.canvas = document.getElementById("game");
+    display.context = display.canvas.getContext("2d");
+    display.recalculate();
+    display.renderBackground(display.canvas, display.context);
+    
+    gameTimer = setInterval(gameLoop, 10);    
+};
+document.addEventListener("DOMContentLoaded", initializeGame);
