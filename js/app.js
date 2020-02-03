@@ -9,7 +9,8 @@ let renderSubscribers = new Map();
 const colors = {
     background: "#C0C0C0",
     playerColor: "#0000FF",
-    enemyColor: "#FF0000"
+    enemyColor: "#FF0000",
+    projectileColor: "#FFFF00"
 };
 
 function gameScreen() {
@@ -25,8 +26,7 @@ function gameScreen() {
     },
     this.recalculate = function() {
         this.canvas = document.getElementById("game");
-        //this.centerWidth = this.canvas.width / 2;
-        console.log(`center width = ${this.centerWidth}`);
+        this.centerWidth = this.canvas.width / 2;
     }
 };
 
@@ -77,6 +77,35 @@ function player (spaceShip) {
     }
 };
 
+function projectile(x, y, width, height, color, display, step) {
+    this.x = x,
+    this.y = y,
+    this.width = width,
+    this.height = height,
+    this.color = color,
+    this.step = step,
+    this.maxSteps = display.canvas.height / this.step,
+    this.currentSteps = 0,
+    this.renderKey = '';
+    this.render = (context) => {        
+        context.fillStyle = this.color;
+        context.fillRect(this.x, this.y, this.width, this.height);
+        this.moveUp();
+    },
+    this.moveUp = ()=>{
+        console.log("Projectile moves up");
+        this.y -= this.step;
+        this.currentSteps++;
+        if (this.currentSteps > this.maxSteps) {
+            renderSubscribers.delete(this.renderKey);
+        }
+    },
+    this.moveDown = ()=>{
+        console.log("Projectile moves down");
+        this.y +this.step + this.height > game.height ? this.y = game.height - this.height : this.y += this.step;
+    }
+};
+
 function spaceShip(x, y, width, height, color) {
     this.x = x,
     this.y = y,
@@ -97,9 +126,15 @@ function spaceShip(x, y, width, height, color) {
         console.log("Spaceship moves right");
         this.x +this.step + this.width > game.width ? this.x = game.width - this.width : this.x += this.step;
     },
+    this.shoot = ()=>{
+        let shot = new projectile(this.x + this.width / 2, this.y, 3, 10, colors.projectileColor, display, 10);
+        
+        shot.renderKey = renderSubscribers.size;
+        renderSubscribers.set(shot.renderKey ,shot);
+    },
     this.keyMap = {
         "65": this.moveLeft,
-        "68": this.moveRight
+        "68": this.moveRight,
+        "87": this.shoot
     }
 };
-
