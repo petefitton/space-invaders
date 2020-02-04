@@ -24,6 +24,7 @@ let renderSubscribers = new Map();
 
 // color values
 const colors = {
+    default: "#A5DF89",
     background: "#C0C0C0",
     playerColor: "#0000FF",
     enemyColor: "#FF0000",
@@ -51,9 +52,9 @@ function Display() {
 // listener for key down
 var keyInputHandler = function(e) {
     for (const iterator of inputSubscribers) {
-        iterator[1].inputHandler(e.keyCode);
+        console.log(iterator)
+        iterator[1].sHandler.inputHandler(e.keyCode);
     }
-    //enemyObj.takeAction();
 }
 
 // the main loop
@@ -63,8 +64,8 @@ var gameLoop = () =>{
 
     display.renderBackground(display.canvas, display.context);
 
-    playerObj.collide();
-    enemyObj.collide();
+    playerObj.sHandler.collide();
+    enemyObj.sHandler.collide();
 
     for (const iterator of renderSubscribers) {
         iterator[1].render(display.context);
@@ -72,77 +73,65 @@ var gameLoop = () =>{
 };
 
 // blueprint for player object
-//function player (spaceShip, collisionDetecor) {
 function player(collisionDetecor) {
-    this.spaceShip,
-    this.spaceShips = [],
-    this.spaceShipMap = new Map();
-    this.collisionDetecor = collisionDetecor,
-    this.inputHandler = function(inputLetter) {
-        this.spaceShip.keyMap[inputLetter].call();
-    },
-    this.render = function(context) {
-        //this.spaceShip[0].render(context);
-        for (const ship of this.spaceShips) {
-            ship.render(display.context);
-        }
-    },
-    this.collide = () =>{
-        this.collisionDetecor.collide();
-    },
-    this.spawnShips = (num) => {
-        var ship = new spaceShip(display.centerWidth-(spaceShipWidth/2), display.canvas.height-spaceShipHeight, spaceShipWidth,spaceShipHeight,colors.playerColor);
-        ship.init(this);
-        ship.renderKey = `player-ship-${renderSubscribers.size}`;
-        this.spaceShipMap.set(ship.renderKey, ship);
-        this.spaceShips.push(ship);
-        renderSubscribers.set(ship.renderKey, ship);
-        //this.spaceShip = this.spaceShips[0];
-        this.spaceShip = ship;
-    },
-    this.onDeath = (ship) => {
-        renderSubscribers.delete(ship.renderKey);
-
-        console.log(`Player died`);
-    }
+    this.sHandler = new shipHandler(color=colors.player, display.canvas.height, `enplayer-ship`, this)
 };
 
-// blueprint for enemy object
-function enemy() {
-    this.yLimit = Math.floor(display.canvas.height * 0.5);
-    this.spaceShips = [],
+// shared between enemy and player
+function shipHandler(color = colors.default, yLimit, prefix, parent) {
+    this.yLimit = yLimit,
+    this.shipArray = [],
+    this.prefix = prefix
+    this.spaceShips = new Map(),
+    this.parent = parent,
+    this.color = color,
+    this.inputHandler = function(inputLetter) {
+        for (const item of this.spaceShips) {
+            item[1].keyMap[inputLetter].call();
+        }
+    },
     this.render = () => {
         for (const ship of this.spaceShips) {
             ship.render();
         }
     },
-    this.spawnShips = (rows) => {        
-        console.log(this.yLimit);
-        var enemyShip = new spaceShip(display.centerWidth-(spaceShipWidth/2), this.yLimit-spaceShipHeight, spaceShipWidth,spaceShipHeight,colors.enemyColor);
-        enemyShip.init(this);
-        enemyShip.renderKey = `enemy-ship-${renderSubscribers.size}`;
-        this.spaceShips.push(enemyShip);
-        renderSubscribers.set(enemyShip.renderKey ,enemyShip);
+    this.spawnShips = (rows) => {
+        var ship = new spaceShip(display.centerWidth-(spaceShipWidth/2), this.yLimit-spaceShipHeight, spaceShipWidth,spaceShipHeight,this.color);
+        ship.init(this);
+        ship.renderKey = `${this.prefix}-${renderSubscribers.size}`;
+        this.spaceShips.set(ship.renderKey, ship);
+        renderSubscribers.set(ship.renderKey ,ship);
+        this.shipArray = [...this.spaceShips.keys()];
     },
     this.collide = () =>{
-        this.collisionDetecor.collide();
+        this.parent.collisionDetecor.collide();
     },
     this.takeAction = () => {
-        //console.log(`${Math.floor(Math.random() * this.shoot.length)}`);
         this.shoot[Math.floor(Math.random() * this.shoot.length)].call();
-        //this.shoot[1].call();
     },
     this.shoot = [
         () => {},
         () => {
-            let shipIndex = Math.floor(Math.random()*this.spaceShips.length);
-            this.spaceShips[shipIndex].aiShoot();
+            let shipIndex = Math.floor(Math.random()*this.shipArray.length);
+            if (this.shipArray.length > 0) {
+                this.spaceShips.get(this.shipArray[shipIndex]).aiShoot();
+            }            
         }
     ],
     this.onDeath = (ship) => {
         renderSubscribers.delete(ship.renderKey);
+        this.spaceShips.delete(ship.renderKey);
+        this.shipArray = [...this.spaceShips.keys()];
+        delete(ship);
+        CheckForWin();
     }
-}
+};
+
+
+// blueprint for enemy object
+function enemy() {
+    this.sHandler = new shipHandler(colors.enemyColor,Math.floor(display.canvas.height * 0.5), `enemy-ship`, this)
+};
 
 // blueprint for projectiles
 function projectile(x, y, width, height, color, display, step, collisionDetecor, damage = 1) {
@@ -214,32 +203,27 @@ function spaceShip(x, y, width, height, color, hitpoints = 3, active = true) {
         this.renderMethod = this.activeRender;
     }
     this.render = (context) => {
-        //this.renderMethod.call(context);
-        this.renderMethod(context); // (context);
+        this.renderMethod(context);
     },
     this.moveLeft = ()=>{
-        // console.log("Spaceship moves left");
         this.x -this.step < 0 ? this.x = 0 : this.x -= this.step;
     },
     this.moveRight = ()=>{
-        // console.log("Spaceship moves right");
         this.x +this.step + this.width > game.width ? this.x = game.width - this.width : this.x += this.step;
     },
     this.shoot = ()=>{
-        //console.log('spaceship is manually shooting');
         let shot = new projectile(this.x + this.width / 2, this.y - this.height, 3, 10, colors.projectileColor, display, 5, enemyCollisionDetector);
         shot.direction = shot.shootUp;
         shot.register();
     },
     this.aiShoot = () => {
-        //console.log("AI is shooting");
         let shot = new projectile(this.x + this.width / 2, this.y+this.height+10, 3, 10, colors.projectileColor, display, 5, playersCollisionDetector);
         shot.direction = shot.shootDown;
         shot.register();
     },
     this.onCollision = (dmg) =>
     {
-        console.log(`${this.renderKey} got hit by ${dmg} damage points`);
+        console.log(`${this.renderKey} got hit with ${dmg} damage points`);
         this.hitpoints -= dmg;
         if (this.hitpoints <= 0) {
             this.die();
@@ -261,7 +245,6 @@ function spaceShip(x, y, width, height, color, hitpoints = 3, active = true) {
         this.activeRender = this.deathRender;
         renderSubscribers.delete(this.renderKey);
         this.parent.onDeath(this);
-        //console.log(`dieing`);
     }
 };
 
@@ -270,21 +253,22 @@ let initializeGame = function() {
     console.log("Initializing");
     display = new Display();
 
+    // create an enemy object so that it can be used for the players collision detector
     enemyObj = new enemy();
-    playersCollisionDetector = new PlayerCollisionDetector(enemyObj);
-    //playerSpaceShip = new spaceShip(display.centerWidth-(20/2), display.canvas.height-20, 20,20,colors.playerColor);
-    //playerSpaceShip.init();
-    //playerObj = new player(playerSpaceShip, playersCollisionDetector);
-    playerObj = new player(playersCollisionDetector);
-    playerObj.spawnShips(1);
-    //playerObj.spaceShips.push(playerSpaceShip);
-    inputSubscribers.set("player", playerObj);
-    //renderSubscribers.set('playerObj',playerObj);
-
     
-    enemyObj.spawnShips(1);
+    // create the player
+    playersCollisionDetector = new PlayerCollisionDetector(enemyObj);
+    playerObj = new player();
+    playerObj.collisionDetecor = playersCollisionDetector;
+    playerObj.sHandler.spawnShips(1);
+
+    inputSubscribers.set("player", playerObj);
+
+    // continue creating the enemy
+    enemyObj.sHandler.spawnShips(3);
     enemyObj.collisionDetecor = new PlayerCollisionDetector(playerObj);
     enemyCollisionDetector = enemyObj.collisionDetecor;
+
 
     document.addEventListener("keydown", keyInputHandler);
     display.canvas = document.getElementById("game");
@@ -292,8 +276,9 @@ let initializeGame = function() {
     display.recalculate();
     display.renderBackground(display.canvas, display.context);    
     
+    // set the timer for the game loop and enemy decision
     gameTimer = setInterval(gameLoop, 16);  
-    enemyTimer = setInterval(enemyObj.takeAction, 200);  
+    enemyTimer = setInterval(enemyObj.sHandler.takeAction, 1000);  
 };
 
 // knows projectiles and checks if they collide with anything 
@@ -302,24 +287,26 @@ function PlayerCollisionDetector(target) {
     this.target = target,
     this.rows = Math.ceil(display.canvas.width / spaceShipWidth)
     this.projectilesOfSource = new Map(),
-    this.collide = () => {          
+    this.collide = () => {   
+        // if there are no projectiles, don't bother     
         if(this.projectilesOfSource.size == 0) return;
-        //console.log('collision detection on');
-        //console.log(this.target); 
-        //console.log("---------------");
+
+        // loop through the known projectiles
         for (const proj of this.projectilesOfSource) {
             let item = proj[1];
+            // continue if projectile is not active
             if (!item.active) continue;
-            
-            //console.log(item);
+
+            // divide the canvas logical in rows and columns
             let itemColumn = Math.ceil(item.x / spaceShipWidth);
             let itemRow = Math.ceil(item.y / spaceShipHeight)
-            //console.log("Checking Col ", itemColumn);
-            //for (const enemyShip of this.target.collisionDetecor.target.spaceShips) {
-            for (const enemyShip of this.target.collisionDetecor.target.spaceShips) {
-                //console.log(this.target); 
+
+            for (const enemyShipItem of this.target.collisionDetecor.target.sHandler.spaceShips) {
+                // select the value of enemyShipItem
+                enemyShip = enemyShipItem[1];
                 let enemyShipColumn = Math.ceil(enemyShip.x / spaceShipWidth);
                 let enemyShipRow = Math.ceil(enemyShip.y / spaceShipHeight);
+                //console.log(enemyShip);
                 if (enemyShipColumn >= itemColumn-1 && enemyShipColumn <= itemColumn+1
                     && enemyShipRow >= itemRow-1 && enemyShipRow <= itemRow + 1
                     && item.x - enemyShip.x > 0
@@ -328,12 +315,11 @@ function PlayerCollisionDetector(target) {
                         enemyShip.onCollision(item.damage);
                         // deactivate the projectile
                         item.unregister();
-                   }                
+                }                
             }
         }
     },
     this.add = (pair) => {
-        //console.log(`Adding pair ${pair}`);
         this.projectilesOfSource.set(pair[0], pair[1]);
     },
     this.remove = (item) => {
@@ -341,49 +327,12 @@ function PlayerCollisionDetector(target) {
     }     
 };
 
-// function PlayerCollisionDetector() {
-//     this.rows = Math.ceil(display.canvas.width / spaceShipWidth)
-//     this.projectilesOfPlayer = new Map(),
-//     this.collide = () => {
-//         if(this.projectilesOfPlayer.size == 0) return;
-//         // console.log('collision detection on');
-//         for (const proj of this.projectilesOfPlayer) {
-//             let item = proj[1];
-//             if (!item.active) return;
-//             // console.log(item);
-//             let itemColumn = Math.ceil(item.x / spaceShipWidth);
-//             let itemRow = Math.ceil(item.y / spaceShipHeight)
-//             //console.log("Checking Col ", itemColumn);
-//             for (const enemyShip of enemyObj.spaceShips) {
-//                 let enemyShipColumn = Math.ceil(enemyShip.x / spaceShipWidth);
-//                 let enemyShipRow = Math.ceil(enemyShip.y / spaceShipHeight);
-//                 if (enemyShipColumn >= itemColumn-1 && enemyShipColumn <= itemColumn+1
-//                     && enemyShipRow >= itemRow-1 && enemyShipRow <= itemRow + 1
-//                     && item.x - enemyShip.x > 0
-//                     && (enemyShip.x + enemyShip.width) - (item.x+item.width) > 0 ) {
-//                         // inform the space ship about the hit
-//                         enemyShip.onCollision(item.damage);
-//                         // deactivate the projectile
-//                         item.unregister();
-//                    }                
-//             }
-//         }
-//     },
-//     this.add = (pair) => {
-//         this.projectilesOfPlayer.set(pair[0], pair[1]);
-//     },
-//     this.remove = (item) => {
-//         this.projectilesOfPlayer.delete(item);
-//     }     
-// };
-
-let launchSomeProjectiles = () => {
-    for (let i = 0; i < display.canvas.width / 20; i++)
-    {
-        let shot = new projectile(i + (i * 20), 0, 3, 20, colors.projectileColor, display, 10, enemyCollisionDetector);
-
-        shot.direction = shot.shootDown;
-        shot.register();
+let CheckForWin = () => {
+    if (playerObj.sHandler.spaceShips.size == 0) {
+        console.log('Game over');
+    }
+    if (playerObj.sHandler.spaceShips.size > 0 && enemyObj.sHandler.spaceShips.size == 0) {
+        console.log("Board cleared");
     }
 };
 
