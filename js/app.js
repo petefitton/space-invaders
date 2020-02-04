@@ -46,11 +46,19 @@ function Display() {
     this.recalculate = function() {
         this.canvas = document.getElementById("game");
         this.centerWidth = this.canvas.width / 2;
+    },
+    this.redrawBackground = () => {
+        this.clear();
+        this.context.fillStyle = colors.background;
+        this.renderBackground();
     }
 };
 
 // listener for key down
 var keyInputHandler = function(e) {
+    // return if game isn't active
+    if (gameState.state !== 1) return;
+    // otherwise call your subscribers
     for (const iterator of inputSubscribers) {
         iterator[1].sHandler.inputHandler(e.keyCode);
     }
@@ -58,11 +66,8 @@ var keyInputHandler = function(e) {
 
 // the main loop
 var gameLoop = () =>{
-    display.clear();
-    display.context.fillStyle = colors.background;
-
-    display.renderBackground(display.canvas, display.context);
-
+    
+    display.redrawBackground();
     playerObj.sHandler.collide();
     enemyObj.sHandler.collide();
 
@@ -309,11 +314,9 @@ let initializeGame = function() {
     display.canvas = document.getElementById("game");
     display.context = display.canvas.getContext("2d");
     display.recalculate();
-    display.renderBackground(display.canvas, display.context);    
-    
-    // set the timer for the game loop and enemy decision
-    gameTimer = setInterval(gameLoop, 16);  
-    enemyTimer = setInterval(enemyObj.takeAction, 1000);  
+    display.renderBackground(display.canvas, display.context);
+
+    startAllGameTimer();
 };
 
 // knows projectiles and checks if they collide with anything 
@@ -365,10 +368,12 @@ function PlayerCollisionDetector(target) {
 let CheckForWin = () => {
     if (playerObj.sHandler.spaceShips.size == 0) {
         console.log('Game over');
+        showGameOverMessage();
         StopActiveGame();
     }
     if (playerObj.sHandler.spaceShips.size > 0 && enemyObj.sHandler.spaceShips.size == 0) {
         console.log("Board cleared");
+        showBoardClearedMessage();
         StopActiveGame();
     }
 };
@@ -378,13 +383,51 @@ let StopActiveGame = () => {
 }
 
 let startOrPauseButtonClicked = () => {
-    
+    // is the game initialized?
+    if (gameState.state == 0)
+    {
+        gameState.state = gameState.states[1];
+        initializeGame();
+        return;
+    }
+    // is it active ?
+    else if (gameState.state == gameState.states[1]) {
+        gameState.state = gameState.states[2];
+        // pause the game
+        pauseTheGame();       
+    }
+    // then it must be paused, so unpause it
+    else {
+        gameState.state = gameState.states[1];
+        unpauseTheGame();
+    }
 }
+
+let startAllGameTimer = () => {
+    gameTimer = setInterval(gameLoop, 16);  
+    enemyTimer = setInterval(enemyObj.takeAction, 1000);  
+}
+
+let unpauseTheGame = () => {
+    startAllGameTimer();
+};
+
+let pauseTheGame = () => {
+    clearInterval(enemyTimer);
+    clearInterval(gameTimer);
+};
+
+// state 0 is not initialized, 1 is active, 2 is paused
+let gameState = {
+    states : [0,1,2],
+    state : 0
+};
 
 let documentItems = {
     ButtonStartPause: '',
     ScoreText: '',
-    LivesText: ''
+    LivesText: '',
+    GameBoard: ''
 };
 
 let lives = {
@@ -396,9 +439,69 @@ let prepareDocument = () => {
     documentItems.ButtonStartPause = document.querySelector(`.start-button`);
     documentItems.ScoreText = document.querySelector(`#score-text`);
     documentItems.LivesText = document.querySelector(`#lives-text`);
+    documentItems.GameBoard = document.querySelector('.game-board');
 
     documentItems.ButtonStartPause.addEventListener("click", startOrPauseButtonClicked);
 }
 
+let showGameOverMessage = () => {
+ 
+    var gameOverMessageDiv = document.createElement('div');
+    gameOverMessageDiv.className = 'game-over-message';
+    
+    var headline = document.createElement('h1');
+    headline.textContent = 'Game Over';
+    gameOverMessageDiv.appendChild(headline);
+    
+    var playAgainButtonDiv = document.createElement('div');
+    playAgainButtonDiv.classList.add('button');
+    playAgainButtonDiv.classList.add('antiquewhite');
+
+    var playAgainButtonSpan = document.createElement('span');
+    playAgainButtonSpan.className = 'play-again-button';
+    playAgainButtonSpan.textContent = 'Play again';
+
+    playAgainButtonDiv.appendChild(playAgainButtonSpan);
+    gameOverMessageDiv.appendChild(playAgainButtonDiv);
+
+    documentItems.GameBoard.appendChild(gameOverMessageDiv);
+};
+
+let showBoardClearedMessage = () => {
+ 
+    var gameOverMessageDiv = document.createElement('div');
+    gameOverMessageDiv.className = 'board-cleared-message';
+     
+    var headline = document.createElement('h1');
+    headline.textContent = 'Board cleared';
+    gameOverMessageDiv.appendChild(headline);
+     
+    var playAgainButtonDiv = document.createElement('div');
+    playAgainButtonDiv.classList.add('button');
+    playAgainButtonDiv.classList.add('antiquewhite');
+    
+    var playAgainButtonSpan = document.createElement('span');
+    playAgainButtonSpan.className = 'play-again-button';
+    playAgainButtonSpan.textContent = 'Play again';
+    
+    playAgainButtonDiv.appendChild(playAgainButtonSpan);
+    gameOverMessageDiv.appendChild(playAgainButtonDiv);
+    
+    documentItems.GameBoard.appendChild(gameOverMessageDiv);
+    };
+
+function removeGameOverMessage() {
+    removeElementFromGameBoard('.game-over-message');
+}
+
+function removeBoardClearedMessage() {
+    removeElementFromGameBoard('.board-cleared-message');    
+}
+
+function removeElementFromGameBoard(div) {
+    var element = documentItems.GameBoard.querySelector(div);
+    if (element)
+        element.parentNode.removeChild(element);
+}
 
 document.addEventListener("DOMContentLoaded", prepareDocument);
