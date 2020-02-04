@@ -9,6 +9,17 @@
     <title>space-invaders</title>
 </head>
 <body>
-    <canvas id="game" width="800" height="600"></canvas>  
+    <div class="content">
+        <div class="top-bar">
+            <div class="start-button col-1">
+                <span class="button">Start</span>
+            </div>
+            <div class="score-area col-1"><label for="score-text">Score:</label> <span id="score-text" class="score">9999</span></div>
+            <div class="lives-area col-1"><span id="lives-text">❤️❤️❤️♡</span></div>
+        </div>
+        <div class="game-board">
+            <canvas id="game" width="800" height="600"></canvas>  
+        </div>    
+    </div>
 </body>
 </html>

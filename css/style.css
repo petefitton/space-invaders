@@ -1,0 +1,29 @@
+body {
+    margin: 0 auto;
+}
+.content {
+    display: grid;
+    grid-template-columns: repeat(15) 1fr ;
+    grid-template-rows: auto;
+    justify-content: space-evenly;
+}
+.top-bar {
+    background-color: antiquewhite;
+    
+    grid-row: 1;
+    grid-column: auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    justify-items: center;
+    grid-gap: 1em;
+    line-height: 1em;
+}
+.start-button:hover {
+    background-color: #C0C0C0;
+}
+.col-1 {
+    padding: 1em;
+}
+.game-board {
+    margin-top: 5px;
+}

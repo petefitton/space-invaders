@@ -90,7 +90,10 @@ function shipHandler(color = colors.default, yLimit, prefix, parent, step, hitpo
     this.hitpoints = hitpoints,
     this.inputHandler = function(inputLetter) {
         for (const item of this.spaceShips) {
-            item[1].keyMap[inputLetter].call();
+            // check if the key actually exist and if it does, call the value
+            if (item[1].keyMap.hasOwnProperty(inputLetter)) {
+                item[1].keyMap[inputLetter].call();
+            }
         }
     },
     this.render = () => {
@@ -99,20 +102,21 @@ function shipHandler(color = colors.default, yLimit, prefix, parent, step, hitpo
         }
     },
     this.spawnShips = (rows) => {
-
+        // populate the game with space ships
         for (var i = 0; i < rows; i++) {
+            // calculate the starting coordinates for X and Y
             let startX = display.centerWidth -  (0.5 * (rows - i) * spaceShipWidth + ((rows - i - 1) * spaceShipWidth));
             let startY = this.yLimit-spaceShipHeight-((rows - i) * spaceShipHeight);
+            // then spawn the needed space ships for each row  
             for (var j = 0; j < rows - i; j++) {
                 var ship = new spaceShip(startX + ((3*j) * spaceShipWidth), startY + (spaceShipHeight * i), spaceShipWidth,spaceShipHeight,this.color, this.hitpoints, true, this.step);
                 ship.init(this);
                 ship.renderKey = `${this.prefix}-${renderSubscribers.size}`;
                 this.spaceShips.set(ship.renderKey, ship);
-                renderSubscribers.set(ship.renderKey ,ship);
-                this.shipArray = [...this.spaceShips.keys()];
+                renderSubscribers.set(ship.renderKey ,ship);                
             }
         }
-
+        this.shipArray = [...this.spaceShips.keys()];
        
     },
     this.collide = () =>{
@@ -138,7 +142,6 @@ function shipHandler(color = colors.default, yLimit, prefix, parent, step, hitpo
         CheckForWin();
     }
 };
-
 
 // blueprint for enemy object
 function enemy() {
@@ -374,4 +377,28 @@ let StopActiveGame = () => {
     clearInterval(enemyTimer);
 }
 
-document.addEventListener("DOMContentLoaded", initializeGame);
+let startOrPauseButtonClicked = () => {
+    
+}
+
+let documentItems = {
+    ButtonStartPause: '',
+    ScoreText: '',
+    LivesText: ''
+};
+
+let lives = {
+    empty: '♡',
+    full: '❤️'
+}
+
+let prepareDocument = () => {
+    documentItems.ButtonStartPause = document.querySelector(`.start-button`);
+    documentItems.ScoreText = document.querySelector(`#score-text`);
+    documentItems.LivesText = document.querySelector(`#lives-text`);
+
+    documentItems.ButtonStartPause.addEventListener("click", startOrPauseButtonClicked);
+}
+
+
+document.addEventListener("DOMContentLoaded", prepareDocument);
