@@ -32,7 +32,7 @@ let keyDownHandler = new KeyDownHandler();
 // color values
 const colors = {
     default: "#A5DF89",
-    background: "#C0C0C0",
+    background: "#000000",
     playerColor: "#0000FF",
     enemyColor: "#FF0000",
     projectileColor: "#FFFF00"
@@ -69,12 +69,43 @@ function Display() {
 // listener for key down
 var keyInputHandler = function(e) {  
     // calls KeyDownHandler
-    keyDownHandler.onKeyDown(e.keyCode);
+    keyDownHandler.onKeyDown(e.keyCode);   
 }
+
+function ExplosionAnimation(startX, startY, lineLen, duration) {
+    this.startX = startX,
+    this.startY = startY,
+    this.sub = 1,
+    this.lineLenMax = lineLen,
+    this.lineLen = 1,
+    this.duration = duration,
+    this.renderKey = '',
+    this.render = () => {
+        for (let i = 1; i <= 24; i++)
+        {
+            display.context.beginPath();
+            display.context.strokeStyle =  '#FAB500';
+            display.context.moveTo(this.startX, this.startY);
+            display.context.lineTo( this.startX + (this.lineLen * Math.sin(i * 15) ), this.startY + (this.lineLen * Math.cos(i*15)));
+            display.context.stroke();
+            this.duration--;
+            if (this.lineLen < this.lineLenMax) this.lineLen+= this.lineLenMax/this.duration;
+        }
+        if (this.duration <= 0) this.unregister();
+    },
+    this.register = () => {
+        this.renderKey = `explosion-${renderSubscribers.size}-${Math.floor(Math.random()*100)}`;
+        renderSubscribers.set(this.renderKey ,this);
+    },
+    this.unregister = () => {
+        renderSubscribers.delete(this.renderKey ,this);
+    }
+};
 
 function KeyDownHandler()  {
     
     this.onKeyDownActive = (keyCode) => {
+        
         // call subscribers
         for (const iterator of inputSubscribers) {
             iterator[1].sHandler.inputHandler(keyCode);
@@ -89,12 +120,12 @@ function KeyDownHandler()  {
         this.onKeyDown = this.onKeyDownInactive;
     },
     this.onKeyDown = () => {
-       // this.activate;
     }
 }
 
 // the main loop
 var gameLoop = () =>{
+    
     keyDownHandler.activate();
     display.redrawBackground();
     CalculateCollision();
@@ -180,9 +211,12 @@ function shipHandler(color = colors.default, yLimit, prefix, parent, step, hitpo
         }
     ],
     this.onDeath = (ship) => {
+        exp = new ExplosionAnimation(ship.x, ship.y, 50, 1000);
+        exp.register();
         renderSubscribers.delete(ship.renderKey);
         this.spaceShips.delete(ship.renderKey);
         this.shipArray = [...this.spaceShips.keys()];
+        ship.aiShoot = () => {};
         delete(ship);
         CheckForWin();
     },
@@ -336,6 +370,7 @@ function spaceShip(x, y, width, height, color, hitpoints = 1, active = true, ste
         
     },
     this.die = () =>{
+        this.aiShoot = () => {};
         this.activeRender = this.deathRender;
         renderSubscribers.delete(this.renderKey);
         this.parent.onDeath(this);
@@ -433,7 +468,6 @@ function ProjectileCollisionDetector(target) {
 let CheckForWin = () => {
     if (gameState.state != 1) return;
     if (playerObj.sHandler.spaceShips.size == 0) {
-        console.log('Game over');
         playerObj.looseLife();
         clearInterval(gameTimer);
         if (playerObj.lives <= 0) {
@@ -446,7 +480,7 @@ let CheckForWin = () => {
         }          
     }
     if (playerObj.sHandler.spaceShips.size > 0 && enemyObj.sHandler.spaceShips.size == 0) {
-        console.log("Board cleared");
+        clearInterval(gameTimer);
         showBoardClearedMessage();
     }
 };
@@ -459,27 +493,20 @@ let playNextLive = () => {
 };
 
 let StopActiveGame = () => {
-    clearInterval(enemyTimer);
-    clearInterval(gameTimer);
-    gameState.state = gameState.states[0];
+    stopAllGameTimer();
+    gameState.state = 3;
     updateStartOrPauseButtonText(0);
     //enemyObj = null;
 }
 
 let playAgainButtonClicked = () => {
-    console.log('play again button pressed');
     initiateNewGame(); 
     clearInterval(gameTimer);
     removeGameOverMessage();
     removeBoardClearedMessage();
     playerObj.init();
-    initiateNewGame();
+    unpauseTheGame();
     gameState.state = gameState.states[1];
-};
-
-let playWithNextLifeButtonClicked = () => {
-    console.log('Play next life clicked');
-
 };
 
 let startOrPauseButtonClicked = () => {
@@ -562,7 +589,6 @@ let prepareDocument = () => {
 };
 
 let updatePlayerLivesUI = () => {
-    console.log(playerObj.lives);
     // how many symbols need to be printed
     let symbols = 3;
     let msg = ``;
@@ -572,8 +598,6 @@ let updatePlayerLivesUI = () => {
         msg += lives.full;
     }
     for (let i = 0 ; i < symbols; i++) {
-        // decrement symbols, player has another live
-        //symbols--;
         msg += lives.empty;
     }
     documentElements.LivesText.textContent = msg;
@@ -594,6 +618,7 @@ let showStartPlayingMessage = () => {
 let createMessageDiv = (divName, headline, buttonText = 'Play again', eventListener = playAgainButtonClicked) => {
     var messageDiv = document.createElement('div');
     messageDiv.className = divName;
+    messageDiv.classList.add('message');
      
     var headlineElement = document.createElement('h1');
     headlineElement.textContent = headline;
