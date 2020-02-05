@@ -2,6 +2,12 @@
 let gameTimer;
 // enemy timer
 let enemyTimer;
+
+let intervals = {
+    gameTimerInterval : 16,
+    enemyTimerInterval : 250
+};
+
 // information of canvas
 let display;
 // players space ship
@@ -21,6 +27,7 @@ let spaceShipHeight = 20;
 let inputSubscribers = new Map();
 let renderSubscribers = new Map();
 
+let keyDownHandler = new KeyDownHandler();
 
 // color values
 const colors = {
@@ -51,36 +58,69 @@ function Display() {
         this.clear();
         this.context.fillStyle = colors.background;
         this.renderBackground();
+    },
+    this.render = () => {
+        for (const iterator of renderSubscribers) {
+            iterator[1].render(display.context);
+        }
     }
 };
 
 // listener for key down
-var keyInputHandler = function(e) {
-    // return if game isn't active
-    if (gameState.state !== 1) return;
-    // otherwise call your subscribers
-    for (const iterator of inputSubscribers) {
-        iterator[1].sHandler.inputHandler(e.keyCode);
+var keyInputHandler = function(e) {  
+    // calls KeyDownHandler
+    keyDownHandler.onKeyDown(e.keyCode);
+}
+
+function KeyDownHandler()  {
+    
+    this.onKeyDownActive = (keyCode) => {
+        // call subscribers
+        for (const iterator of inputSubscribers) {
+            iterator[1].sHandler.inputHandler(keyCode);
+        }
+    },
+    this.onKeyDownInactive = (keyCode)  => {
+    },
+    this.activate = () => {
+        this.onKeyDown = this.onKeyDownActive;
+    },
+    this.deactivate = () => {
+        this.onKeyDown = this.onKeyDownInactive;
+    },
+    this.onKeyDown = () => {
+       // this.activate;
     }
 }
 
 // the main loop
 var gameLoop = () =>{
-    
+    keyDownHandler.activate();
     display.redrawBackground();
-    playerObj.sHandler.collide();
-    enemyObj.sHandler.collide();
-
+    CalculateCollision();
     enemyObj.doEachFrame();
 
-    for (const iterator of renderSubscribers) {
-        iterator[1].render(display.context);
-    }
+    display.render();
 };
+
+function CalculateCollision() {
+    playerObj.sHandler.collide();
+    enemyObj.sHandler.collide();
+}
 
 // blueprint for player object
 function player(collisionDetecor) {
     this.sHandler = new shipHandler(colors.playerColor, display.canvas.height, `enplayer-ship`, this,10,3)
+    this.lives = 3
+    this.init = () => {
+        this.lives = 3;
+    }
+    this.looseLife = () => {
+        if (this.lives > 0) {
+            this.lives--;
+            updatePlayerLivesUI();
+        }        
+    }
 };
 
 // shared between enemy and player
@@ -145,6 +185,15 @@ function shipHandler(color = colors.default, yLimit, prefix, parent, step, hitpo
         this.shipArray = [...this.spaceShips.keys()];
         delete(ship);
         CheckForWin();
+    },
+    this.removeAllShips = () => {
+        for (const ship of this.spaceShips) {
+            //this.onDeath(ship);
+            renderSubscribers.delete(ship.renderKey);
+        this.spaceShips.delete(ship.renderKey);
+        this.shipArray = [...this.spaceShips.keys()];
+        delete(ship);
+        }
     }
 };
 
@@ -172,6 +221,10 @@ function enemy() {
     this.horizontalMovingDirection = false,
     this.horizontalDirections = (which) => {
         return which? 'moveRight' : 'moveLeft';
+    },
+    this.cleanUp = () => {
+        // remove all projectiles
+        this.sHandler.removeAllShips();
     }
 };
 
@@ -292,24 +345,36 @@ function spaceShip(x, y, width, height, color, hitpoints = 1, active = true, ste
 // what has to happen to initialize the game lives here
 let initializeGame = function() {
     display = new Display();
+    playerObj = new player();
+    playerObj.init();
+    initiateNewGame();    
+};
 
+let clearSubscribers = () => {
+    inputSubscribers.clear();
+    renderSubscribers.clear();
+};
+
+let initiateNewGame = () => {
+    // clear input and render subscribers
+    clearSubscribers();
+    updatePlayerLivesUI();
     // create an enemy object so that it can be used for the players collision detector
     enemyObj = new enemy();
     
     // create the player
-    playersCollisionDetector = new PlayerCollisionDetector(enemyObj);
-    playerObj = new player();
+    playersCollisionDetector = new ProjectileCollisionDetector(enemyObj);
     playerObj.collisionDetecor = playersCollisionDetector;
     playerObj.sHandler.spawnShips(1);
-
+    // subscribe to keyDown event
     inputSubscribers.set("player", playerObj);
 
     // continue creating the enemy
     enemyObj.sHandler.spawnShips(5);
-    enemyObj.collisionDetecor = new PlayerCollisionDetector(playerObj);
+    enemyObj.collisionDetecor = new ProjectileCollisionDetector(playerObj);
     enemyCollisionDetector = enemyObj.collisionDetecor;
 
-
+    // 
     document.addEventListener("keydown", keyInputHandler);
     display.canvas = document.getElementById("game");
     display.context = display.canvas.getContext("2d");
@@ -321,7 +386,7 @@ let initializeGame = function() {
 
 // knows projectiles and checks if they collide with anything 
 // collision detection is not pixel perfect
-function PlayerCollisionDetector(target) {
+function ProjectileCollisionDetector(target) {
     this.target = target,
     this.rows = Math.ceil(display.canvas.width / spaceShipWidth)
     this.projectilesOfSource = new Map(),
@@ -366,21 +431,56 @@ function PlayerCollisionDetector(target) {
 };
 
 let CheckForWin = () => {
+    if (gameState.state != 1) return;
     if (playerObj.sHandler.spaceShips.size == 0) {
         console.log('Game over');
-        showGameOverMessage();
-        StopActiveGame();
+        playerObj.looseLife();
+        clearInterval(gameTimer);
+        if (playerObj.lives <= 0) {
+            showGameOverMessage();
+            StopActiveGame();
+        }      
+        else {
+            clearInterval(gameTimer);
+            playNextLive();            
+        }          
     }
     if (playerObj.sHandler.spaceShips.size > 0 && enemyObj.sHandler.spaceShips.size == 0) {
         console.log("Board cleared");
         showBoardClearedMessage();
-        StopActiveGame();
     }
+};
+
+let playNextLive = () => {
+    clearInterval(enemyTimer);
+    enemyObj.cleanUp();
+    gameState.state = gameState.states[1];
+    initiateNewGame();
 };
 
 let StopActiveGame = () => {
     clearInterval(enemyTimer);
+    clearInterval(gameTimer);
+    gameState.state = gameState.states[0];
+    updateStartOrPauseButtonText(0);
+    //enemyObj = null;
 }
+
+let playAgainButtonClicked = () => {
+    console.log('play again button pressed');
+    initiateNewGame(); 
+    clearInterval(gameTimer);
+    removeGameOverMessage();
+    removeBoardClearedMessage();
+    playerObj.init();
+    initiateNewGame();
+    gameState.state = gameState.states[1];
+};
+
+let playWithNextLifeButtonClicked = () => {
+    console.log('Play next life clicked');
+
+};
 
 let startOrPauseButtonClicked = () => {
     // is the game initialized?
@@ -388,33 +488,47 @@ let startOrPauseButtonClicked = () => {
     {
         gameState.state = gameState.states[1];
         initializeGame();
+        removeGameOverMessage();
+        removeBoardClearedMessage();
+        updateStartOrPauseButtonText(1);
         return;
     }
     // is it active ?
     else if (gameState.state == gameState.states[1]) {
         gameState.state = gameState.states[2];
         // pause the game
-        pauseTheGame();       
+        pauseTheGame();  
+        updateStartOrPauseButtonText(0);     
     }
     // then it must be paused, so unpause it
     else {
         gameState.state = gameState.states[1];
         unpauseTheGame();
+        updateStartOrPauseButtonText(1);  
     }
 }
 
+let updateStartOrPauseButtonText = (index) => {
+    let buttonStates = ['Start', 'Pause'];
+    documentElements.ButtonStartPause.textContent = buttonStates[index];
+};
+
 let startAllGameTimer = () => {
-    gameTimer = setInterval(gameLoop, 16);  
-    enemyTimer = setInterval(enemyObj.takeAction, 1000);  
+    gameTimer = setInterval(gameLoop, intervals.gameTimerInterval);  
+    enemyTimer = setInterval(enemyObj.takeAction, intervals.enemyTimerInterval);  
 }
+
+let stopAllGameTimer = () => {
+    clearInterval(enemyTimer);
+    clearInterval(gameTimer);
+};
 
 let unpauseTheGame = () => {
     startAllGameTimer();
 };
 
 let pauseTheGame = () => {
-    clearInterval(enemyTimer);
-    clearInterval(gameTimer);
+    stopAllGameTimer();
 };
 
 // state 0 is not initialized, 1 is active, 2 is paused
@@ -423,7 +537,7 @@ let gameState = {
     state : 0
 };
 
-let documentItems = {
+let documentElements = {
     ButtonStartPause: '',
     ScoreText: '',
     LivesText: '',
@@ -436,45 +550,54 @@ let lives = {
 }
 
 let prepareDocument = () => {
-    documentItems.ButtonStartPause = document.querySelector(`.start-button`);
-    documentItems.ScoreText = document.querySelector(`#score-text`);
-    documentItems.LivesText = document.querySelector(`#lives-text`);
-    documentItems.GameBoard = document.querySelector('.game-board');
+    // find elements in documnet
+    documentElements.ButtonStartPause = document.querySelector(`.start-button`);
+    documentElements.ScoreText = document.querySelector(`#score-text`);
+    documentElements.LivesText = document.querySelector(`#lives-text`);
+    documentElements.GameBoard = document.querySelector('.game-board');
 
-    documentItems.ButtonStartPause.addEventListener("click", startOrPauseButtonClicked);
-}
-
-let showGameOverMessage = () => {
- 
-    var gameOverMessageDiv = document.createElement('div');
-    gameOverMessageDiv.className = 'game-over-message';
-    
-    var headline = document.createElement('h1');
-    headline.textContent = 'Game Over';
-    gameOverMessageDiv.appendChild(headline);
-    
-    var playAgainButtonDiv = document.createElement('div');
-    playAgainButtonDiv.classList.add('button');
-    playAgainButtonDiv.classList.add('antiquewhite');
-
-    var playAgainButtonSpan = document.createElement('span');
-    playAgainButtonSpan.className = 'play-again-button';
-    playAgainButtonSpan.textContent = 'Play again';
-
-    playAgainButtonDiv.appendChild(playAgainButtonSpan);
-    gameOverMessageDiv.appendChild(playAgainButtonDiv);
-
-    documentItems.GameBoard.appendChild(gameOverMessageDiv);
+    // set event listener
+    documentElements.ButtonStartPause.addEventListener("click", startOrPauseButtonClicked);
+    showStartPlayingMessage();
 };
 
-let showBoardClearedMessage = () => {
- 
-    var gameOverMessageDiv = document.createElement('div');
-    gameOverMessageDiv.className = 'board-cleared-message';
+let updatePlayerLivesUI = () => {
+    console.log(playerObj.lives);
+    // how many symbols need to be printed
+    let symbols = 3;
+    let msg = ``;
+    for (let i = 0 ; i < playerObj.lives; i++) {
+        // decrement symbols, player has another live
+        symbols--;
+        msg += lives.full;
+    }
+    for (let i = 0 ; i < symbols; i++) {
+        // decrement symbols, player has another live
+        //symbols--;
+        msg += lives.empty;
+    }
+    documentElements.LivesText.textContent = msg;
+};
+
+let showGameOverMessage = () => {
+    documentElements.GameBoard.appendChild(createMessageDiv('game-over-message', 'Game Over'));
+};
+
+let showBoardClearedMessage = () => {    
+    documentElements.GameBoard.appendChild(createMessageDiv('board-cleared-message', 'Board cleared'));
+};
+
+let showStartPlayingMessage = () => {
+    documentElements.GameBoard.appendChild(createMessageDiv('board-cleared-message', 'Welcome', 'Start playing', startOrPauseButtonClicked));
+}
+
+let createMessageDiv = (divName, headline, buttonText = 'Play again', eventListener = playAgainButtonClicked) => {
+    var messageDiv = document.createElement('div');
+    messageDiv.className = divName;
      
-    var headline = document.createElement('h1');
-    headline.textContent = 'Board cleared';
-    gameOverMessageDiv.appendChild(headline);
+    var headlineElement = document.createElement('h1');
+    headlineElement.textContent = headline;
+    messageDiv.appendChild(headlineElement);
      
     var playAgainButtonDiv = document.createElement('div');
     playAgainButtonDiv.classList.add('button');
@@ -482,26 +605,30 @@ let showBoardClearedMessage = () => {
     
     var playAgainButtonSpan = document.createElement('span');
     playAgainButtonSpan.className = 'play-again-button';
-    playAgainButtonSpan.textContent = 'Play again';
+    playAgainButtonSpan.textContent = buttonText;
+    playAgainButtonDiv.addEventListener('click', eventListener);
     
     playAgainButtonDiv.appendChild(playAgainButtonSpan);
-    gameOverMessageDiv.appendChild(playAgainButtonDiv);
+    messageDiv.appendChild(playAgainButtonDiv);
     
-    documentItems.GameBoard.appendChild(gameOverMessageDiv);
-    };
+    return messageDiv;
+};
 
 function removeGameOverMessage() {
     removeElementFromGameBoard('.game-over-message');
-}
+};
 
 function removeBoardClearedMessage() {
     removeElementFromGameBoard('.board-cleared-message');    
-}
+};
 
 function removeElementFromGameBoard(div) {
-    var element = documentItems.GameBoard.querySelector(div);
-    if (element)
-        element.parentNode.removeChild(element);
-}
+    var element = documentElements.GameBoard.querySelectorAll(div);
+    if (element) {
+        element.forEach(item => {
+            item.parentNode.removeChild(item);
+        });
+    }
+};
 
 document.addEventListener("DOMContentLoaded", prepareDocument);
