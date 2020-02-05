@@ -5,7 +5,7 @@ let enemyTimer;
 
 let intervals = {
     gameTimerInterval : 16,
-    enemyTimerInterval : 250
+    enemyTimerInterval : 500
 };
 
 // information of canvas
@@ -72,6 +72,7 @@ var keyInputHandler = function(e) {
     keyDownHandler.onKeyDown(e.keyCode);   
 }
 
+// Animation for exploding space ships
 function ExplosionAnimation(startX, startY, lineLen, duration) {
     this.startX = startX,
     this.startY = startY,
@@ -81,16 +82,18 @@ function ExplosionAnimation(startX, startY, lineLen, duration) {
     this.duration = duration,
     this.renderKey = '',
     this.render = () => {
+        // draw 24 increasing lines 
         for (let i = 1; i <= 24; i++)
         {
             display.context.beginPath();
             display.context.strokeStyle =  '#FAB500';
             display.context.moveTo(this.startX, this.startY);
-            display.context.lineTo( this.startX + (this.lineLen * Math.sin(i * 15) ), this.startY + (this.lineLen * Math.cos(i*15)));
+            display.context.lineTo( this.startX + (this.lineLen * Math.sin(i * this.sub+15) ), this.startY + (this.lineLen * Math.cos(i*this.sub+15)));
             display.context.stroke();
             this.duration--;
             if (this.lineLen < this.lineLenMax) this.lineLen+= this.lineLenMax/this.duration;
         }
+        this.sub+=10;
         if (this.duration <= 0) this.unregister();
     },
     this.register = () => {
@@ -108,7 +111,7 @@ function KeyDownHandler()  {
         
         // call subscribers
         for (const iterator of inputSubscribers) {
-            iterator[1].sHandler.inputHandler(keyCode);
+            iterator[1].shipHandler.inputHandler(keyCode);
         }
     },
     this.onKeyDownInactive = (keyCode)  => {
@@ -124,38 +127,46 @@ function KeyDownHandler()  {
 }
 
 // the main loop
-var gameLoop = () =>{
-    
+var gameLoop = () => {    
     keyDownHandler.activate();
     display.redrawBackground();
     CalculateCollision();
     enemyObj.doEachFrame();
-
     display.render();
 };
 
 function CalculateCollision() {
-    playerObj.sHandler.collide();
-    enemyObj.sHandler.collide();
+    playerObj.shipHandler.collide();
+    enemyObj.shipHandler.collide();
 }
 
 // blueprint for player object
 function player(collisionDetecor) {
-    this.sHandler = new shipHandler(colors.playerColor, display.canvas.height, `enplayer-ship`, this,10,3)
-    this.lives = 3
+    this.shipHandler = new ShipHandler(colors.playerColor, display.canvas.height, `enplayer-ship`, this,10, 3)
+    this.lives = 3,
+    this.level = 1,
+    this.score = 0,
     this.init = () => {
         this.lives = 3;
+        this.level = 1;
+        this.score = 0;
+        updatePlayerLivesUI();
+        updatePlayerScoreUI(this.score);
     }
     this.looseLife = () => {
         if (this.lives > 0) {
             this.lives--;
             updatePlayerLivesUI();
         }        
-    }
+    },
+    this.addScore = (num) => {
+        this.score += num;
+        updatePlayerScoreUI(this.score);
+    } 
 };
 
 // shared between enemy and player
-function shipHandler(color = colors.default, yLimit, prefix, parent, step, hitpoints = 1) {
+function ShipHandler(color = colors.default, yLimit, prefix, parent, step, hitpoints = 1) {
     this.yLimit = yLimit,
     this.shipArray = [],
     this.prefix = prefix
@@ -216,8 +227,8 @@ function shipHandler(color = colors.default, yLimit, prefix, parent, step, hitpo
         renderSubscribers.delete(ship.renderKey);
         this.spaceShips.delete(ship.renderKey);
         this.shipArray = [...this.spaceShips.keys()];
-        ship.aiShoot = () => {};
         delete(ship);
+        ship = null;
         CheckForWin();
     },
     this.removeAllShips = () => {
@@ -233,21 +244,21 @@ function shipHandler(color = colors.default, yLimit, prefix, parent, step, hitpo
 
 // blueprint for enemy object
 function enemy() {
-    this.sHandler = new shipHandler(colors.enemyColor,Math.floor(display.canvas.height * 0.5), `enemy-ship`, this, 3, 1),
+    this.shipHandler = new ShipHandler(colors.enemyColor,Math.floor(display.canvas.height * 0.5), `enemy-ship`, this, 3, 1),
     this.intervalHorizontal = 0,
     this.moveHorizontally = () => {
         if (this.intervalHorizontal >= spaceShipWidth) {
             this.intervalHorizontal = -spaceShipWidth;
             this.horizontalMovingDirection = !this.horizontalMovingDirection;
         }
-        for (item of this.sHandler.spaceShips) {
+        for (item of this.shipHandler.spaceShips) {
             item[1][this.horizontalDirections(this.horizontalMovingDirection)].call();            
         }
         this.intervalHorizontal++;
 
     },
     this.takeAction = () => {
-        this.sHandler.takeAction();
+        this.shipHandler.takeAction();
     },
     this.doEachFrame = () => {
         this.moveHorizontally();
@@ -258,7 +269,7 @@ function enemy() {
     },
     this.cleanUp = () => {
         // remove all projectiles
-        this.sHandler.removeAllShips();
+        this.shipHandler.removeAllShips();
     }
 };
 
@@ -365,9 +376,6 @@ function spaceShip(x, y, width, height, color, hitpoints = 1, active = true, ste
     this.activeRender = function(context) {
         context.fillStyle = this.color;
         context.fillRect(this.x, this.y, this.width, this.height);
-    }
-    this.deathRender = (context) => {
-        
     },
     this.die = () =>{
         this.aiShoot = () => {};
@@ -392,6 +400,7 @@ let clearSubscribers = () => {
 
 let initiateNewGame = () => {
     // clear input and render subscribers
+    stopAllGameTimer();
     clearSubscribers();
     updatePlayerLivesUI();
     // create an enemy object so that it can be used for the players collision detector
@@ -400,12 +409,13 @@ let initiateNewGame = () => {
     // create the player
     playersCollisionDetector = new ProjectileCollisionDetector(enemyObj);
     playerObj.collisionDetecor = playersCollisionDetector;
-    playerObj.sHandler.spawnShips(1);
+    playerObj.shipHandler.spawnShips(1);
+    
     // subscribe to keyDown event
     inputSubscribers.set("player", playerObj);
 
     // continue creating the enemy
-    enemyObj.sHandler.spawnShips(5);
+    enemyObj.shipHandler.spawnShips(5);
     enemyObj.collisionDetecor = new ProjectileCollisionDetector(playerObj);
     enemyCollisionDetector = enemyObj.collisionDetecor;
 
@@ -439,7 +449,7 @@ function ProjectileCollisionDetector(target) {
             let itemColumn = Math.ceil(item.x / spaceShipWidth);
             let itemRow = Math.ceil(item.y / spaceShipHeight)
 
-            for (const enemyShipItem of this.target.collisionDetecor.target.sHandler.spaceShips) {
+            for (const enemyShipItem of this.target.collisionDetecor.target.shipHandler.spaceShips) {
                 // select the value of enemyShipItem
                 enemyShip = enemyShipItem[1];
                 let enemyShipColumn = Math.ceil(enemyShip.x / spaceShipWidth);
@@ -467,46 +477,54 @@ function ProjectileCollisionDetector(target) {
 
 let CheckForWin = () => {
     if (gameState.state != 1) return;
-    if (playerObj.sHandler.spaceShips.size == 0) {
+    if (playerObj.shipHandler.spaceShips.size == 0) {
         playerObj.looseLife();
-        clearInterval(gameTimer);
         if (playerObj.lives <= 0) {
             showGameOverMessage();
             StopActiveGame();
         }      
         else {
-            clearInterval(gameTimer);
+            clearInterval(enemyTimer);
             playNextLive();            
         }          
     }
-    if (playerObj.sHandler.spaceShips.size > 0 && enemyObj.sHandler.spaceShips.size == 0) {
-        clearInterval(gameTimer);
+    if (playerObj.shipHandler.spaceShips.size > 0 && enemyObj.shipHandler.spaceShips.size == 0) {
         showBoardClearedMessage();
     }
 };
 
 let playNextLive = () => {
-    clearInterval(enemyTimer);
+    //clearInterval(enemyTimer);
+    clearInterval(gameTimer);
     enemyObj.cleanUp();
     gameState.state = gameState.states[1];
     initiateNewGame();
 };
 
 let StopActiveGame = () => {
-    stopAllGameTimer();
+    //stopAllGameTimer();
     gameState.state = 3;
     updateStartOrPauseButtonText(0);
-    //enemyObj = null;
 }
 
 let playAgainButtonClicked = () => {
     initiateNewGame(); 
-    clearInterval(gameTimer);
+    removeGameOverMessage();
+    removeBoardClearedMessage();
+    //playerObj.init();
+    gameState.state = gameState.states[1];
+};
+
+let playAgainAfterGameOverButtonClicked = () => {
+    initiateNewGame(); 
     removeGameOverMessage();
     removeBoardClearedMessage();
     playerObj.init();
-    unpauseTheGame();
     gameState.state = gameState.states[1];
+};
+
+let playNextLevelButtonClicked = () => {
+    
 };
 
 let startOrPauseButtonClicked = () => {
@@ -541,6 +559,8 @@ let updateStartOrPauseButtonText = (index) => {
 };
 
 let startAllGameTimer = () => {
+    gameTimer = null;
+    enemyTimer = null;
     gameTimer = setInterval(gameLoop, intervals.gameTimerInterval);  
     enemyTimer = setInterval(enemyObj.takeAction, intervals.enemyTimerInterval);  
 }
@@ -548,6 +568,8 @@ let startAllGameTimer = () => {
 let stopAllGameTimer = () => {
     clearInterval(enemyTimer);
     clearInterval(gameTimer);
+    gameTimer = null;
+    enemyTimer = null;
 };
 
 let unpauseTheGame = () => {
@@ -603,8 +625,12 @@ let updatePlayerLivesUI = () => {
     documentElements.LivesText.textContent = msg;
 };
 
+let updatePlayerScoreUI = (score) => {
+    documentElements.ScoreText.textContent = `${score}`;
+};
+
 let showGameOverMessage = () => {
-    documentElements.GameBoard.appendChild(createMessageDiv('game-over-message', 'Game Over'));
+    documentElements.GameBoard.appendChild(createMessageDiv('game-over-message', 'Game Over', 'New game', playAgainAfterGameOverButtonClicked));
 };
 
 let showBoardClearedMessage = () => {    
