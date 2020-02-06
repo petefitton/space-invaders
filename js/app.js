@@ -1,36 +1,38 @@
 // game loop timer
 let gameTimer;
+
 // enemy timer
 let enemyTimer;
-
-let intervals = {
-    gameTimerInterval : 16,
-    enemyTimerInterval : 500
-};
-
-var pressedKeys = {};
-
-// information of canvas
-let display;
-
-// players space ship
-let playerSpaceShip;
-
-// players object
-let playerObj;
-
-// enemy object
-let enemyObj;
 
 // size for space ships
 let spaceShipWidth = 20;
 let spaceShipHeight = 20;
 
-// who is listening for events
-let inputSubscribers = new Map();
-let renderSubscribers = new Map();
+// timer intervals 
+let intervals = {
+    gameTimerInterval : 16,
+    enemyTimerInterval : 500
+};
 
-let keyDownHandler = new KeyDownHandler();
+// state 0 is not initialized, 1 is active, 2 is paused
+let gameState = {
+    states : [0,1,2],
+    state : 0
+};
+
+// elements of the DOM in frequent use
+let documentElements = {
+    ButtonStartPause: '',
+    ScoreText: '',
+    LivesText: '',
+    GameBoard: ''
+};
+
+// symbols for player lives in UI
+let lives = {
+    empty: '♡',
+    full: '❤️'
+}
 
 // color values
 const colors = {
@@ -41,7 +43,215 @@ const colors = {
     projectileColor: "#FFFF00"
 };
 
+// contains key value pairs of keys that the user pressed
+// used by keyInputHandler
+var pressedKeys = {};
+
+// information of canvas
+let display;
+
+// players space ship
+//let playerSpaceShip;
+
+// players object
+let playerObj;
+
+// enemy object
+let enemyObj;
+
+// who is listening for input events
+let inputSubscribers = new Map();
+
+// used by Display which calls the subscribers render method
+let renderSubscribers = new Map();
+
+// handles user input and works with inputSubscribers
+let keyDownHandler = new KeyDownHandler();
+
+
+/*
+    Event listeners
+*/
+
+// listener for key down, inspired by
+// https://stackoverflow.com/questions/5203407/how-to-detect-if-multiple-keys-are-pressed-at-once-using-javascript
+var keyInputHandler = onkeyup = function(e) {
+    // calls KeyDownHandler
+    e = e || event; // to deal with IE
+    pressedKeys[e.keyCode] = e.type == 'keydown';
+    for (const key in pressedKeys) {
+        if (pressedKeys.hasOwnProperty(key)) {
+            const element = pressedKeys[key]; 
+            if (element) {
+                keyDownHandler.onKeyDown(key);  
+            }
+        }
+    }
+};
+
+// globally accessable through keyDownHandler
+// if activ it calls the input handler of a ship handler
+// activated and deactivated by pause and unpause
+function KeyDownHandler()  {
+    this.onKeyDownActive = (keyCode) => {
+        // call subscribers
+        for (const iterator of inputSubscribers) {
+            iterator[1].shipHandler.inputHandler(keyCode);
+        }
+    },
+    this.onKeyDownInactive = (keyCode)  => {
+    },
+    this.activate = () => {
+        this.onKeyDown = this.onKeyDownActive;
+    },
+    this.deactivate = () => {
+        this.onKeyDown = this.onKeyDownInactive;
+    },
+    this.onKeyDown = () => {
+    }
+};
+
+/*
+    Click listeners
+*/
+
+// player won the current level and clicked the button to play it again
+let playAgainButtonClicked = () => {
+    initiateNewGame(); 
+    removeMessagesFromUI() 
+    gameState.state = gameState.states[1];
+};
+
+// player is game over and clicked the button to start a new game
+let playAgainAfterGameOverButtonClicked = () => {
+    initiateNewGame(); 
+    removeMessagesFromUI() 
+    playerObj.init();
+    gameState.state = gameState.states[1];
+};
+
+// player won the current level and wants to play the next one
+let playNextLevelButtonClicked = () => {
+    
+};
+
+// listenes to a click event and pauses or unpauses the current game
+let startOrPauseButtonClicked = () => {
+    // is the game initialized?
+    if (gameState.state == 0)
+    {
+        gameState.state = gameState.states[1];
+        initializeGame();
+        removeMessagesFromUI() 
+        updateStartOrPauseButtonText(1);
+        return;
+    }
+    // is it active ?
+    else if (gameState.state == gameState.states[1]) {
+        gameState.state = gameState.states[2];
+        // pause the game
+        pauseTheGame();  
+        updateStartOrPauseButtonText(0);     
+    }
+    // then it must be paused, so unpause it
+    else {
+        gameState.state = gameState.states[1];
+        unpauseTheGame();
+        updateStartOrPauseButtonText(1);  
+    }
+}
+
+// the main loop
+var gameLoop = () => {    
+    keyDownHandler.activate();
+    display.redrawBackground();
+    CalculateCollision();
+    enemyObj.doEachFrame();
+    display.render();
+};
+
+// called by gameLoop 
+function CalculateCollision() {
+    playerObj.shipHandler.collide();
+    enemyObj.shipHandler.collide();
+}
+
+// what has to happen to initialize the game lives here
+let initializeGame = function() {
+    display = new Display();
+    playerObj = new player();
+    playerObj.init();
+    initiateNewGame();    
+};
+
+// is called by initializeGame, play next live and various button click events
+let initiateNewGame = () => {
+    // clear input and render subscribers
+    stopAllGameTimer();
+    clearSubscribers();
+    updatePlayerLivesUI();
+    // create an enemy object so that it can be used for the players collision detector
+    enemyObj = new enemy();
+    enemyObj.shipHandler.spawnShips(5);
+    enemyObj.collisionDetecor = new ProjectileCollisionDetector(playerObj);
+    enemyObj.CollisionDetector = enemyObj.collisionDetecor;
+    
+    // prepare the player
+    playerObj.prepareForNewGame();
+
+    document.addEventListener("keydown", keyInputHandler);
+    display.recalculate();
+    display.renderBackground(display.canvas, display.context);
+
+    startAllGameTimer();
+};
+
+// removes all subscribers from the list of input and render subscribers
+// is called by initiateNewGame
+let clearSubscribers = () => {
+    inputSubscribers.clear();
+    renderSubscribers.clear();
+};
+
+// the player lost a live but has at least one left
+let playNextLive = () => {
+    clearInterval(gameTimer);
+    enemyObj.cleanUp();
+    gameState.state = gameState.states[1];
+    initiateNewGame();
+};
+
+// stops the active game if player is game over
+let StopActiveGame = () => {
+    gameState.state = 3;
+    updateStartOrPauseButtonText(0);
+};
+
+// checks if the player ran out of lives or won the current level
+let CheckForWin = () => {
+    if (gameState.state != 1) return;
+    if (playerObj.shipHandler.spaceShips.size == 0) {
+        playerObj.looseLife();
+        if (playerObj.lives <= 0) {
+            showGameOverMessage();
+            StopActiveGame();
+        }      
+        else {
+            clearInterval(enemyTimer);
+            playNextLive();            
+        }          
+    }
+    if (playerObj.shipHandler.spaceShips.size > 0 && enemyObj.shipHandler.spaceShips.size == 0) {
+        showBoardClearedMessage();
+    }
+};
+
+/*
+    Object blueprints
+*/
+
 // Display knows about the HTML 5 canvas
+// is globally accessable with display
 function Display() {
     this.canvas = document.getElementById("game"),
     this.centerWidth = this.canvas.width / 2,
@@ -68,92 +278,7 @@ function Display() {
         }
     }
 };
-
-// listener for key down, inspired by
-// https://stackoverflow.com/questions/5203407/how-to-detect-if-multiple-keys-are-pressed-at-once-using-javascript
-var keyInputHandler = onkeyup = function(e) {  
-    // calls KeyDownHandler
-    e = e || event; // to deal with IE
-    pressedKeys[e.keyCode] = e.type == 'keydown';
-    for (const key in pressedKeys) {
-        if (pressedKeys.hasOwnProperty(key)) {
-            const element = pressedKeys[key]; 
-            if (element) {
-                keyDownHandler.onKeyDown(key);  
-            }
-        }
-    }
-}
-
-// Animation for exploding space ships
-function ExplosionAnimation(startX, startY, lineLen, duration) {
-    this.startX = startX,
-    this.startY = startY,
-    this.sub = 1,
-    this.lineLenMax = lineLen,
-    this.lineLen = 1,
-    this.duration = duration,
-    this.renderKey = '',
-    this.render = () => {
-        // draw 24 increasing lines 
-        for (let i = 1; i <= 24; i++)
-        {
-            display.context.beginPath();
-            display.context.strokeStyle =  '#FAB500';
-            display.context.moveTo(this.startX, this.startY);
-            display.context.lineTo( this.startX + (this.lineLen * Math.sin(i * this.sub+15) ), this.startY + (this.lineLen * Math.cos(i*this.sub+15)));
-            display.context.stroke();
-            this.duration--;
-            if (this.lineLen < this.lineLenMax) this.lineLen+= this.lineLenMax/this.duration;
-        }
-        this.sub+=10;
-        if (this.duration <= 0) this.unregister();
-    },
-    this.register = () => {
-        this.renderKey = `explosion-${renderSubscribers.size}-${Math.floor(Math.random()*100)}`;
-        renderSubscribers.set(this.renderKey ,this);
-    },
-    this.unregister = () => {
-        renderSubscribers.delete(this.renderKey ,this);
-    }
-};
-
-function KeyDownHandler()  {
-    
-    this.onKeyDownActive = (keyCode) => {
-        
-        // call subscribers
-        for (const iterator of inputSubscribers) {
-            iterator[1].shipHandler.inputHandler(keyCode);
-        }
-    },
-    this.onKeyDownInactive = (keyCode)  => {
-    },
-    this.activate = () => {
-        this.onKeyDown = this.onKeyDownActive;
-    },
-    this.deactivate = () => {
-        this.onKeyDown = this.onKeyDownInactive;
-    },
-    this.onKeyDown = () => {
-    }
-}
-
-// the main loop
-var gameLoop = () => {    
-    keyDownHandler.activate();
-    display.redrawBackground();
-    CalculateCollision();
-    enemyObj.doEachFrame();
-    display.render();
-};
-
-function CalculateCollision() {
-    playerObj.shipHandler.collide();
-    enemyObj.shipHandler.collide();
-}
-
-// blueprint for player object
+// globally represented as playerObj
 function player(collisionDetecor) {
     this.shipHandler = new ShipHandler(colors.playerColor, display.canvas.height, `player-ship`, this,10, 3)
     this.lives = 3,
@@ -186,7 +311,43 @@ function player(collisionDetecor) {
     this.sendScore = (score) => {}
 };
 
+// globally represented by enemyObj
+function enemy() {
+    this.shipHandler = new ShipHandler(colors.enemyColor,Math.floor(display.canvas.height * 0.5), `enemy-ship`, this, 3, 1),
+    this.intervalHorizontal = 0,
+    this.moveHorizontally = () => {
+        if (this.intervalHorizontal >= spaceShipWidth) {
+            this.intervalHorizontal = -spaceShipWidth;
+            this.horizontalMovingDirection = !this.horizontalMovingDirection;
+        }
+        for (item of this.shipHandler.spaceShips) {
+            item[1][this.horizontalDirections(this.horizontalMovingDirection)].call();            
+        }
+        this.intervalHorizontal++;
+
+    },
+    this.takeAction = () => {
+        this.shipHandler.takeAction();
+    },
+    this.doEachFrame = () => {
+        this.moveHorizontally();
+    },
+    this.horizontalMovingDirection = false,
+    this.horizontalDirections = (which) => {
+        return which? 'moveRight' : 'moveLeft';
+    },
+    this.cleanUp = () => {
+        // remove all projectiles
+        this.shipHandler.removeAllShips();
+    },
+    this.sendScore = (score) => {
+        playerObj.addScore(score);
+    }
+};
+
 // shared between enemy and player
+// player and enemy have a ship handler
+// which deals with creation, controling and removing of space ships
 function ShipHandler(color = colors.default, yLimit, prefix, parent, step, hitpoints = 1) {
     this.yLimit = yLimit,
     this.shipArray = [],
@@ -282,41 +443,8 @@ function ShipHandler(color = colors.default, yLimit, prefix, parent, step, hitpo
     }
 };
 
-// blueprint for enemy object
-function enemy() {
-    this.shipHandler = new ShipHandler(colors.enemyColor,Math.floor(display.canvas.height * 0.5), `enemy-ship`, this, 3, 1),
-    this.intervalHorizontal = 0,
-    this.moveHorizontally = () => {
-        if (this.intervalHorizontal >= spaceShipWidth) {
-            this.intervalHorizontal = -spaceShipWidth;
-            this.horizontalMovingDirection = !this.horizontalMovingDirection;
-        }
-        for (item of this.shipHandler.spaceShips) {
-            item[1][this.horizontalDirections(this.horizontalMovingDirection)].call();            
-        }
-        this.intervalHorizontal++;
-
-    },
-    this.takeAction = () => {
-        this.shipHandler.takeAction();
-    },
-    this.doEachFrame = () => {
-        this.moveHorizontally();
-    },
-    this.horizontalMovingDirection = false,
-    this.horizontalDirections = (which) => {
-        return which? 'moveRight' : 'moveLeft';
-    },
-    this.cleanUp = () => {
-        // remove all projectiles
-        this.shipHandler.removeAllShips();
-    },
-    this.sendScore = (score) => {
-        playerObj.addScore(score);
-    }
-};
-
 // blueprint for projectiles
+// projectiles are instantiated by space ships 
 function projectile(x, y, width, height, color, display, step, collisionDetecor, damage = 1) {
     this.active = true,
     this.x = x,
@@ -369,6 +497,8 @@ function projectile(x, y, width, height, color, display, step, collisionDetecor,
 };
 
 // blueprint for space ships
+// space ships are controlled by a ship handler 
+// they instantiate projectiles 
 function spaceShip(x, y, width, height, color, hitpoints = 1, active = true, step=2) {
     this.x = x,
     this.y = y,
@@ -434,45 +564,40 @@ function spaceShip(x, y, width, height, color, hitpoints = 1, active = true, ste
     }
 };
 
-// what has to happen to initialize the game lives here
-let initializeGame = function() {
-    display = new Display();
-    playerObj = new player();
-    playerObj.init();
-    initiateNewGame();    
+// Animation for exploding space ships
+function ExplosionAnimation(startX, startY, lineLen, duration) {
+    this.startX = startX,
+    this.startY = startY,
+    this.sub = 1,
+    this.lineLenMax = lineLen,
+    this.lineLen = 1,
+    this.duration = duration,
+    this.renderKey = '',
+    this.render = () => {
+        // draw 24 increasing lines 
+        for (let i = 1; i <= 24; i++)
+        {
+            display.context.beginPath();
+            display.context.strokeStyle =  '#FAB500';
+            display.context.moveTo(this.startX, this.startY);
+            display.context.lineTo( this.startX + (this.lineLen * Math.sin(i * this.sub+15) ), this.startY + (this.lineLen * Math.cos(i*this.sub+15)));
+            display.context.stroke();
+            this.duration--;
+            if (this.lineLen < this.lineLenMax) this.lineLen+= this.lineLenMax/this.duration;
+        }
+        this.sub+=10;
+        if (this.duration <= 0) this.unregister();
+    },
+    this.register = () => {
+        this.renderKey = `explosion-${renderSubscribers.size}-${Math.floor(Math.random()*100)}`;
+        renderSubscribers.set(this.renderKey ,this);
+    },
+    this.unregister = () => {
+        renderSubscribers.delete(this.renderKey ,this);
+    }
 };
 
-let clearSubscribers = () => {
-    inputSubscribers.clear();
-    renderSubscribers.clear();
-};
-
-let initiateNewGame = () => {
-    // clear input and render subscribers
-    stopAllGameTimer();
-    clearSubscribers();
-    updatePlayerLivesUI();
-    // create an enemy object so that it can be used for the players collision detector
-    enemyObj = new enemy();
-    
-    // create the player
-    
-
-    playerObj.prepareForNewGame();
-
-    // continue creating the enemy
-    enemyObj.shipHandler.spawnShips(5);
-    enemyObj.collisionDetecor = new ProjectileCollisionDetector(playerObj);
-    enemyObj.CollisionDetector = enemyObj.collisionDetecor;
-
-    document.addEventListener("keydown", keyInputHandler);
-    display.recalculate();
-    display.renderBackground(display.canvas, display.context);
-
-    startAllGameTimer();
-};
-
-// knows projectiles and checks if they collide with anything 
+// knows projectiles and checks if they collide with target objects 
 // collision detection is not pixel perfect
 function ProjectileCollisionDetector(target) {
     this.target = target,
@@ -518,87 +643,20 @@ function ProjectileCollisionDetector(target) {
     }     
 };
 
-let CheckForWin = () => {
-    if (gameState.state != 1) return;
-    if (playerObj.shipHandler.spaceShips.size == 0) {
-        playerObj.looseLife();
-        if (playerObj.lives <= 0) {
-            showGameOverMessage();
-            StopActiveGame();
-        }      
-        else {
-            clearInterval(enemyTimer);
-            playNextLive();            
-        }          
-    }
-    if (playerObj.shipHandler.spaceShips.size > 0 && enemyObj.shipHandler.spaceShips.size == 0) {
-        showBoardClearedMessage();
-    }
+/*
+    Timers
+*/
+
+let unpauseTheGame = () => {
+    // listen to input again
+    keyDownHandler.activate();
+    startAllGameTimer();
 };
 
-let playNextLive = () => {
-    //clearInterval(enemyTimer);
-    clearInterval(gameTimer);
-    enemyObj.cleanUp();
-    gameState.state = gameState.states[1];
-    initiateNewGame();
-};
-
-let StopActiveGame = () => {
-    //stopAllGameTimer();
-    gameState.state = 3;
-    updateStartOrPauseButtonText(0);
-}
-
-let playAgainButtonClicked = () => {
-    initiateNewGame(); 
-    removeGameOverMessage();
-    removeBoardClearedMessage();
-    //playerObj.init();
-    gameState.state = gameState.states[1];
-};
-
-let playAgainAfterGameOverButtonClicked = () => {
-    initiateNewGame(); 
-    removeGameOverMessage();
-    removeBoardClearedMessage();
-    playerObj.init();
-    gameState.state = gameState.states[1];
-};
-
-let playNextLevelButtonClicked = () => {
-    
-};
-
-let startOrPauseButtonClicked = () => {
-    // is the game initialized?
-    if (gameState.state == 0)
-    {
-        gameState.state = gameState.states[1];
-        initializeGame();
-        removeGameOverMessage();
-        removeBoardClearedMessage();
-        updateStartOrPauseButtonText(1);
-        return;
-    }
-    // is it active ?
-    else if (gameState.state == gameState.states[1]) {
-        gameState.state = gameState.states[2];
-        // pause the game
-        pauseTheGame();  
-        updateStartOrPauseButtonText(0);     
-    }
-    // then it must be paused, so unpause it
-    else {
-        gameState.state = gameState.states[1];
-        unpauseTheGame();
-        updateStartOrPauseButtonText(1);  
-    }
-}
-
-let updateStartOrPauseButtonText = (index) => {
-    let buttonStates = ['Start', 'Pause'];
-    documentElements.ButtonStartPause.textContent = buttonStates[index];
+let pauseTheGame = () => {
+    // stop listening to input
+    keyDownHandler.deactivate();
+    stopAllGameTimer();
 };
 
 let startAllGameTimer = () => {
@@ -615,44 +673,29 @@ let stopAllGameTimer = () => {
     enemyTimer = null;
 };
 
-let unpauseTheGame = () => {
-    startAllGameTimer();
-};
+/* 
+    DOM manipulation
+*/
 
-let pauseTheGame = () => {
-    stopAllGameTimer();
-};
-
-// state 0 is not initialized, 1 is active, 2 is paused
-let gameState = {
-    states : [0,1,2],
-    state : 0
-};
-
-let documentElements = {
-    ButtonStartPause: '',
-    ScoreText: '',
-    LivesText: '',
-    GameBoard: ''
-};
-
-let lives = {
-    empty: '♡',
-    full: '❤️'
-}
-
+// find elements in DOM and store them in documentElements
 let prepareDocument = () => {
-    // find elements in documnet
     documentElements.ButtonStartPause = document.querySelector(`.start-button`).querySelector(`.button`);
     documentElements.ScoreText = document.querySelector(`#score-text`);
     documentElements.LivesText = document.querySelector(`#lives-text`);
     documentElements.GameBoard = document.querySelector('.game-board');
-
+    
     // set event listener
     documentElements.ButtonStartPause.addEventListener("click", startOrPauseButtonClicked);
     showStartPlayingMessage();
 };
 
+// updates the UI text for the pause button to the selected index
+let updateStartOrPauseButtonText = (index) => {
+    let buttonStates = ['Start', 'Pause'];
+    documentElements.ButtonStartPause.textContent = buttonStates[index];
+};
+
+// is called by player object and updates the representation of lives in the UI
 let updatePlayerLivesUI = () => {
     // how many symbols need to be printed
     let symbols = 3;
@@ -668,22 +711,27 @@ let updatePlayerLivesUI = () => {
     documentElements.LivesText.textContent = msg;
 };
 
+// is called by the player object and sets the score elements text to the value of its parameter
 let updatePlayerScoreUI = (score) => {
     documentElements.ScoreText.textContent = `${score}`;
 };
 
+// shows a div element that informes the player of their lost game
 let showGameOverMessage = () => {
     documentElements.GameBoard.appendChild(createMessageDiv('game-over-message', 'Game Over', 'New game', playAgainAfterGameOverButtonClicked));
 };
 
+// shows a div element that informes the player if they win the current level
 let showBoardClearedMessage = () => {    
     documentElements.GameBoard.appendChild(createMessageDiv('board-cleared-message', 'Board cleared'));
 };
 
+// shows the initial message to start a game when there is no active game state
 let showStartPlayingMessage = () => {
     documentElements.GameBoard.appendChild(createMessageDiv('board-cleared-message', 'Welcome', 'Start playing', startOrPauseButtonClicked));
 }
 
+// creates divs for the show message functions and sets their event listener
 let createMessageDiv = (divName, headline, buttonText = 'Play again', eventListener = playAgainButtonClicked) => {
     var messageDiv = document.createElement('div');
     messageDiv.className = divName;
@@ -708,14 +756,13 @@ let createMessageDiv = (divName, headline, buttonText = 'Play again', eventListe
     return messageDiv;
 };
 
-function removeGameOverMessage() {
+// is called by button click event listeners to remove message divs from the DOM
+function removeMessagesFromUI() {
     removeElementFromGameBoard('.game-over-message');
-};
-
-function removeBoardClearedMessage() {
     removeElementFromGameBoard('.board-cleared-message');    
 };
 
+// is called by removeMessagesFromUI to remove a specific element from the DOMs game board
 function removeElementFromGameBoard(div) {
     var element = documentElements.GameBoard.querySelectorAll(div);
     if (element) {
@@ -725,4 +772,5 @@ function removeElementFromGameBoard(div) {
     }
 };
 
+// after the DOM content is loaded, prepare the document
 document.addEventListener("DOMContentLoaded", prepareDocument);
