@@ -8,6 +8,8 @@ let intervals = {
     enemyTimerInterval : 500
 };
 
+var pressedKeys = {};
+
 // information of canvas
 let display;
 
@@ -67,10 +69,23 @@ function Display() {
     }
 };
 
-// listener for key down
-var keyInputHandler = function(e) {  
+// listener for key down, inspired by
+// https://stackoverflow.com/questions/5203407/how-to-detect-if-multiple-keys-are-pressed-at-once-using-javascript
+var keyInputHandler = onkeyup = function(e) {  
     // calls KeyDownHandler
-    keyDownHandler.onKeyDown(e.keyCode);   
+    e = e || event; // to deal with IE
+    pressedKeys[e.keyCode] = e.type == 'keydown';
+    console.log(pressedKeys);
+    for (const key in pressedKeys) {
+        if (pressedKeys.hasOwnProperty(key)) {
+            const element = pressedKeys[key];
+            
+            if (element) {
+                console.log(`pressed ${element}`);
+                keyDownHandler.onKeyDown(key);  
+            }
+        }
+    }
 }
 
 // Animation for exploding space ships
@@ -199,8 +214,8 @@ function ShipHandler(color = colors.default, yLimit, prefix, parent, step, hitpo
         }
     },
     this.spawnShips = (rows) => {
-        // populate the game with space ships
-        for (var i = 0; i < rows; i++) {
+        //populate the game with space ships
+        for (var     i = 0; i < rows; i++) {
             // calculate the starting coordinates for X and Y
             let startX = display.centerWidth -  (0.5 * (rows - i) * spaceShipWidth + ((rows - i - 1) * spaceShipWidth));
             let startY = this.yLimit-spaceShipHeight-((rows - i) * spaceShipHeight);
