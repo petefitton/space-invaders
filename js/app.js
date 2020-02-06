@@ -75,13 +75,10 @@ var keyInputHandler = onkeyup = function(e) {
     // calls KeyDownHandler
     e = e || event; // to deal with IE
     pressedKeys[e.keyCode] = e.type == 'keydown';
-    console.log(pressedKeys);
     for (const key in pressedKeys) {
         if (pressedKeys.hasOwnProperty(key)) {
-            const element = pressedKeys[key];
-            
+            const element = pressedKeys[key]; 
             if (element) {
-                console.log(`pressed ${element}`);
                 keyDownHandler.onKeyDown(key);  
             }
         }
@@ -215,20 +212,8 @@ function ShipHandler(color = colors.default, yLimit, prefix, parent, step, hitpo
     },
     this.spawnShips = (rows) => {
         //populate the game with space ships
-        for (var     i = 0; i < rows; i++) {
-            // calculate the starting coordinates for X and Y
-            let startX = display.centerWidth -  (0.5 * (rows - i) * spaceShipWidth + ((rows - i - 1) * spaceShipWidth));
-            let startY = this.yLimit-spaceShipHeight-((rows - i) * spaceShipHeight);
-            // then spawn the needed space ships for each row  
-            for (var j = 0; j < rows - i; j++) {
-                var ship = new spaceShip(startX + ((3*j) * spaceShipWidth), startY + (spaceShipHeight * i), spaceShipWidth,spaceShipHeight,this.color, this.hitpoints, true, this.step);
-                ship.init(this);
-                ship.renderKey = `${this.prefix}-${renderSubscribers.size}`;
-                this.spaceShips.set(ship.renderKey, ship);
-                renderSubscribers.set(ship.renderKey ,ship);                
-            }
-        }
-        this.shipArray = [...this.spaceShips.keys()];
+        //this.triangleFormation(rows);
+        this.rectangleFormation(rows);
     },
     this.collide = () =>{
         this.parent.collisionDetecor.collide();
@@ -263,6 +248,37 @@ function ShipHandler(color = colors.default, yLimit, prefix, parent, step, hitpo
             this.shipArray = [...this.spaceShips.keys()];
             delete(ship);
         }
+    },
+    this.rectangleFormation = (rows) => {
+        for (let i = 0; i < rows; i++) {
+            let startX = display.centerWidth - (0.5 * (rows - i) * spaceShipWidth + ((rows - i - 1) * spaceShipWidth));
+            let startY = this.yLimit - spaceShipHeight - ((rows - i) * spaceShipHeight);  
+            
+            for (var j = 0; j < rows; j++) {
+                var ship = new spaceShip(startX + ((3 * j) * spaceShipWidth), startY + (spaceShipHeight * i), spaceShipWidth, spaceShipHeight, this.color, this.hitpoints, true, this.step);
+                ship.init(this);
+                ship.renderKey = `${this.prefix}-${renderSubscribers.size}`;
+                this.spaceShips.set(ship.renderKey, ship);
+                renderSubscribers.set(ship.renderKey, ship);
+            }
+        }
+        this.shipArray = [...this.spaceShips.keys()];
+    },
+    this.triangleFormation = (rows) => {
+        for (var i = 0; i < rows; i++) {
+            // calculate the starting coordinates for X and Y
+            let startX = display.centerWidth - (0.5 * (rows - i) * spaceShipWidth + ((rows - i - 1) * spaceShipWidth));
+            let startY = this.yLimit - spaceShipHeight - ((rows - i) * spaceShipHeight);
+            // then spawn the needed space ships for each row  
+            for (var j = 0; j < rows - i; j++) {
+                var ship = new spaceShip(startX + ((3 * j) * spaceShipWidth), startY + (spaceShipHeight * i), spaceShipWidth, spaceShipHeight, this.color, this.hitpoints, true, this.step);
+                ship.init(this);
+                ship.renderKey = `${this.prefix}-${renderSubscribers.size}`;
+                this.spaceShips.set(ship.renderKey, ship);
+                renderSubscribers.set(ship.renderKey, ship);
+            }
+        }
+        this.shipArray = [...this.spaceShips.keys()];
     }
 };
 
@@ -398,7 +414,10 @@ function spaceShip(x, y, width, height, color, hitpoints = 1, active = true, ste
     this.keyMap = {
         "65": this.moveLeft,
         "68": this.moveRight,
-        "87": this.shoot
+        "87": this.shoot,
+        "37": this.moveLeft,
+        "39": this.moveRight,
+        "38": this.shoot
     },
     this.activeRender = function(context) {
         context.fillStyle = this.color;
@@ -624,7 +643,7 @@ let lives = {
 
 let prepareDocument = () => {
     // find elements in documnet
-    documentElements.ButtonStartPause = document.querySelector(`.start-button`);
+    documentElements.ButtonStartPause = document.querySelector(`.start-button`).querySelector(`.button`);
     documentElements.ScoreText = document.querySelector(`#score-text`);
     documentElements.LivesText = document.querySelector(`#lives-text`);
     documentElements.GameBoard = document.querySelector('.game-board');
