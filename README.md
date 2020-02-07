@@ -104,12 +104,12 @@ F --> D(collision detection);
 A --> E(AI control);
 AA{paused} --> |false| A;
 B --> F(process);
-F --> |push to| G(render queue)
+F --> |push to| G(render queue);
 E --> F;
-D --> |push to| G
+D --> |push to| G;
 C --> H;
 G --> H(display);
-H --> I[Render canvas]
+H --> I[Render canvas];
 ```
 ---
 
@@ -255,18 +255,23 @@ function SpaceShip() {
 }
 ```
 
-
 ## Resources and recommendations
 
 w3schools.com offers a lot of material to interesting topics.
+
 [https://www.w3schools.com HTML5 canvas](https://www.w3schools.com/html/html5_canvas.asp)
+
 In this case it helped to get a basic understanding of how to use a canvas in HTML5.
 
 [stackoverflow - detect if multiple keys are pressed](https://stackoverflow.com/questions/5203407/how-to-detect-if-multiple-keys-are-pressed-at-once-using-javascript)
+
 While playing it didn't feel good to just be able to one thing at a time, either move or shoot.
 The game experience improved with the ability to process multiple inputs and the implementation into the then current way of processing user input was pretty straight forward.
 
 Last but not least...
+
 [MDN — the Mozilla Developer Network](https://developer.mozilla.org/en-US/)
+
 [Canvas API](https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API)
+
 [JavaScript](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
