@@ -35,6 +35,7 @@ body {
     padding: 1em;
     display: inline;
     color: black;
+    margin: 1em;
 }
 
 .message {

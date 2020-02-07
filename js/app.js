@@ -11,7 +11,8 @@ let spaceShipHeight = 20;
 // timer intervals 
 let intervals = {
     gameTimerInterval : 16,
-    enemyTimerInterval : 500
+    enemyTimerInterval : 500,
+    enemyTimerIntervalDefault : 500
 };
 
 // state 0 is not initialized, 1 is active, 2 is paused
@@ -68,7 +69,6 @@ let renderSubscribers = new Map();
 // handles user input and works with inputSubscribers
 let keyDownHandler = new KeyDownHandler();
 
-
 /*
     Event listeners
 */
@@ -118,21 +118,20 @@ function KeyDownHandler()  {
 // player won the current level and clicked the button to play it again
 let playAgainButtonClicked = () => {
     initiateNewGame(); 
-    removeMessagesFromUI() 
-    gameState.state = gameState.states[1];
+    removeMessagesFromUI();
 };
 
 // player is game over and clicked the button to start a new game
 let playAgainAfterGameOverButtonClicked = () => {
-    initiateNewGame(); 
-    removeMessagesFromUI() 
     playerObj.init();
-    gameState.state = gameState.states[1];
+    initiateNewGame(); 
+    removeMessagesFromUI();
 };
 
 // player won the current level and wants to play the next one
 let playNextLevelButtonClicked = () => {
-    
+    initiateNewLevel(); 
+    removeMessagesFromUI();
 };
 
 // listenes to a click event and pauses or unpauses the current game
@@ -142,7 +141,7 @@ let startOrPauseButtonClicked = () => {
     {
         gameState.state = gameState.states[1];
         initializeGame();
-        removeMessagesFromUI() 
+        removeMessagesFromUI();
         updateStartOrPauseButtonText(1);
         return;
     }
@@ -176,6 +175,13 @@ function CalculateCollision() {
     enemyObj.shipHandler.collide();
 }
 
+// called by initiateNewGame
+function clearInputAndRenderSubscribers() {
+    stopAllGameTimer();
+    clearSubscribers();
+    updatePlayerLivesUI();
+}
+
 // what has to happen to initialize the game lives here
 let initializeGame = function() {
     display = new Display();
@@ -187,12 +193,14 @@ let initializeGame = function() {
 // is called by initializeGame, play next live and various button click events
 let initiateNewGame = () => {
     // clear input and render subscribers
-    stopAllGameTimer();
-    clearSubscribers();
-    updatePlayerLivesUI();
+    clearInputAndRenderSubscribers();
     // create an enemy object so that it can be used for the players collision detector
-    enemyObj = new enemy();
-    enemyObj.shipHandler.spawnShips(5);
+    enemyObj = new enemy(playerObj.level);
+    // Max level 15, then increase frequency and hitpoints of enemies
+    enemyObj.shipHandler.spawnShips(playerObj.enemyRows);
+    if (playerObj.level > 14) {
+        enemyObj.shipHandler.shootStrategy = enemyObj.shipHandler.multiShoot;
+    }
     enemyObj.collisionDetecor = new ProjectileCollisionDetector(playerObj);
     enemyObj.CollisionDetector = enemyObj.collisionDetecor;
     
@@ -204,6 +212,14 @@ let initiateNewGame = () => {
     display.renderBackground(display.canvas, display.context);
 
     startAllGameTimer();
+    gameState.state = gameState.states[1];
+};
+
+// the player won the last level, keep score and current lives, but create a new challenge
+let initiateNewLevel = () => {
+    clearInputAndRenderSubscribers();
+    playerObj.increaseLevel();
+    initiateNewGame();
 };
 
 // removes all subscribers from the list of input and render subscribers
@@ -283,14 +299,20 @@ function player(collisionDetecor) {
     this.shipHandler = new ShipHandler(colors.playerColor, display.canvas.height, `player-ship`, this,10, 3)
     this.lives = 3,
     this.level = 1,
+    this.enemyRows = 1,
     this.score = 0,
     this.init = () => {
+        this.enemyRows = 1;
         this.lives = 3;
         this.level = 1;
         this.score = 0;
         updatePlayerLivesUI();
         updatePlayerScoreUI(this.score);
-    }
+    },
+    this.increaseLevel = () => {
+        this.level++;
+        this.enemyRows = Math.ceil(0.01 + this.level % 14);
+    },
     this.looseLife = () => {
         if (this.lives > 0) {
             this.lives--;
@@ -304,6 +326,8 @@ function player(collisionDetecor) {
     this.prepareForNewGame = () => {
         playerObj.collisionDetector = new ProjectileCollisionDetector(enemyObj);
         this.collisionDetecor = playerObj.collisionDetector;
+        // delete current ships
+        this.shipHandler.removeAllShips();
         this.shipHandler.spawnShips(1);
         // subscribe to keyDown event
         inputSubscribers.set("player", playerObj);
@@ -312,9 +336,11 @@ function player(collisionDetecor) {
 };
 
 // globally represented by enemyObj
-function enemy() {
+function enemy(level) {
     this.shipHandler = new ShipHandler(colors.enemyColor,Math.floor(display.canvas.height * 0.5), `enemy-ship`, this, 3, 1),
     this.intervalHorizontal = 0,
+    this.level = level,
+    this.horizontalMovingDirection = false,
     this.moveHorizontally = () => {
         if (this.intervalHorizontal >= spaceShipWidth) {
             this.intervalHorizontal = -spaceShipWidth;
@@ -324,7 +350,6 @@ function enemy() {
             item[1][this.horizontalDirections(this.horizontalMovingDirection)].call();            
         }
         this.intervalHorizontal++;
-
     },
     this.takeAction = () => {
         this.shipHandler.takeAction();
@@ -332,7 +357,6 @@ function enemy() {
     this.doEachFrame = () => {
         this.moveHorizontally();
     },
-    this.horizontalMovingDirection = false,
     this.horizontalDirections = (which) => {
         return which? 'moveRight' : 'moveLeft';
     },
@@ -373,15 +397,24 @@ function ShipHandler(color = colors.default, yLimit, prefix, parent, step, hitpo
     },
     this.spawnShips = (rows) => {
         //populate the game with space ships
-        //this.triangleFormation(rows);
-        this.rectangleFormation(rows);
+        this.triangleFormation(rows);
+        //this.rectangleFormation(rows);
     },
-    this.collide = () =>{
+    this.collide = () => {
         this.parent.collisionDetecor.collide();
     },
     this.takeAction = () => {
+        this.shootStrategy();
+    },
+    this.simpleShoot = () => {
         this.shoot[Math.floor(Math.random() * this.shoot.length)].call();
     },
+    this.multiShoot = () => {
+        for (const ship of this.spaceShips) {
+            this.shoot[Math.floor(Math.random() * this.shoot.length)].call();
+        }
+    },
+    this.shootStrategy = this.simpleShoot,
     this.shoot = [
         () => {},
         () => {
@@ -396,6 +429,7 @@ function ShipHandler(color = colors.default, yLimit, prefix, parent, step, hitpo
         exp = new ExplosionAnimation(ship.x, ship.y, 50, 1000);
         exp.register();
         renderSubscribers.delete(ship.renderKey);
+        inputSubscribers.delete(ship.renderKey);
         this.spaceShips.delete(ship.renderKey);
         this.shipArray = [...this.spaceShips.keys()];
         delete(ship);
@@ -405,10 +439,12 @@ function ShipHandler(color = colors.default, yLimit, prefix, parent, step, hitpo
     this.removeAllShips = () => {
         for (const ship of this.spaceShips) {
             renderSubscribers.delete(ship.renderKey);
+            inputSubscribers.delete(ship.renderKey);
             this.spaceShips.delete(ship.renderKey);
             this.shipArray = [...this.spaceShips.keys()];
             delete(ship);
         }
+        this.spaceShips.clear();
     },
     this.rectangleFormation = (rows) => {
         for (let i = 0; i < rows; i++) {
@@ -474,14 +510,14 @@ function projectile(x, y, width, height, color, display, step, collisionDetecor,
         this.y -= this.step;
         this.currentSteps++;
         if (this.currentSteps > this.maxSteps) {
-            renderSubscribers.delete(this.renderKey);
+            this.unregister();
         }
     },
     this.moveDown = ()=>{
         this.y += this.step;
         this.currentSteps++;
         if (this.currentSteps > this.maxSteps) {
-            renderSubscribers.delete(this.renderKey);
+            this.unregister();
         }
     }, 
     this.register = () => {
@@ -514,7 +550,7 @@ function spaceShip(x, y, width, height, color, hitpoints = 1, active = true, ste
     this.init = (parent) => {
         this.parent = parent;
         this.renderMethod = this.activeRender;
-    }
+    },
     this.render = (context) => {
         this.renderMethod(context);
     },
@@ -718,21 +754,21 @@ let updatePlayerScoreUI = (score) => {
 
 // shows a div element that informes the player of their lost game
 let showGameOverMessage = () => {
-    documentElements.GameBoard.appendChild(createMessageDiv('game-over-message', 'Game Over', 'New game', playAgainAfterGameOverButtonClicked));
+    documentElements.GameBoard.appendChild(createMessageDiv('game-over-message', 'Game Over', ['New game'], [playAgainAfterGameOverButtonClicked]));
 };
 
 // shows a div element that informes the player if they win the current level
 let showBoardClearedMessage = () => {    
-    documentElements.GameBoard.appendChild(createMessageDiv('board-cleared-message', 'Board cleared'));
+    documentElements.GameBoard.appendChild(createMessageDiv('board-cleared-message', 'Board cleared',['Play again', 'Next level'], [playAgainButtonClicked, playNextLevelButtonClicked]));
 };
 
 // shows the initial message to start a game when there is no active game state
 let showStartPlayingMessage = () => {
-    documentElements.GameBoard.appendChild(createMessageDiv('board-cleared-message', 'Welcome', 'Start playing', startOrPauseButtonClicked));
+    documentElements.GameBoard.appendChild(createMessageDiv('board-cleared-message', 'Welcome', ['Start playing'], [startOrPauseButtonClicked]));
 }
 
 // creates divs for the show message functions and sets their event listener
-let createMessageDiv = (divName, headline, buttonText = 'Play again', eventListener = playAgainButtonClicked) => {
+let createMessageDiv = (divName, headline, buttonText = ['Play again'], eventListener = [playAgainButtonClicked]) => {
     var messageDiv = document.createElement('div');
     messageDiv.className = divName;
     messageDiv.classList.add('message');
@@ -740,19 +776,21 @@ let createMessageDiv = (divName, headline, buttonText = 'Play again', eventListe
     var headlineElement = document.createElement('h1');
     headlineElement.textContent = headline;
     messageDiv.appendChild(headlineElement);
-     
-    var playAgainButtonDiv = document.createElement('div');
-    playAgainButtonDiv.classList.add('button');
-    playAgainButtonDiv.classList.add('antiquewhite');
+    var i = 0;
+    for (var btnText of buttonText) {
+        var playAgainButtonDiv = document.createElement('div');
+        playAgainButtonDiv.classList.add('button');
+        playAgainButtonDiv.classList.add('antiquewhite');
     
-    var playAgainButtonSpan = document.createElement('span');
-    playAgainButtonSpan.className = 'play-again-button';
-    playAgainButtonSpan.textContent = buttonText;
-    playAgainButtonDiv.addEventListener('click', eventListener);
+        var playAgainButtonSpan = document.createElement('span');
+        playAgainButtonSpan.className = 'play-again-button';
+        playAgainButtonSpan.textContent = btnText;
+        playAgainButtonDiv.addEventListener('click', eventListener[i]);
     
-    playAgainButtonDiv.appendChild(playAgainButtonSpan);
-    messageDiv.appendChild(playAgainButtonDiv);
-    
+        playAgainButtonDiv.appendChild(playAgainButtonSpan);
+        messageDiv.appendChild(playAgainButtonDiv);
+        i++;
+    }    
     return messageDiv;
 };
 
