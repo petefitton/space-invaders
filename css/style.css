@@ -1,12 +1,25 @@
 body {
     margin: 0 auto;
+    background-color: black;
 }
+
+ul {
+    list-style-type: none;
+    margin: 0;
+    padding: 0;
+}
+
+.antiquewhite {
+    background-color: antiquewhite;
+}
+
 .content {
     display: grid;
     grid-template-columns: repeat(15) 1fr ;
     grid-template-rows: auto;
     justify-content: space-evenly;
 }
+
 .top-bar {
     background-color: antiquewhite;    
     grid-row: 1;
@@ -21,9 +34,7 @@ body {
 .button:hover {
     background-color: rgb(222, 222, 222);
 }
-.antiquewhite {
-    background-color: antiquewhite;
-}
+
 .col-1 {
     padding: 1em;
 }
@@ -31,6 +42,7 @@ body {
     margin-top: 5px;
     color: white;
 }
+
 .button {
     padding: 1em;
     display: inline;
